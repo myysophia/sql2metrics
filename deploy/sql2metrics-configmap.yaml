@@ -1,0 +1,95 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sql2metrics-config
+  labels:
+    app: sql2metrics
+data:
+  config.yml: |
+    schedule:
+      interval: 1h
+
+    prometheus:
+      listen_address: 0.0.0.0
+      listen_port: 8080
+
+    mysql:
+      host: ${MYSQL_HOST}
+      port: ${MYSQL_PORT}
+      user: ${MYSQL_USER}
+      password: ${MYSQL_PASS}
+      database: nova_energy
+      params:
+        parseTime: "true"
+        charset: utf8mb4
+
+    mysql_connections:
+      default:
+        host: ${MYSQL_HOST}
+        port: ${MYSQL_PORT}
+        user: ${MYSQL_USER}
+        password: ${MYSQL_PASS}
+        database: nova_energy
+        params:
+          parseTime: "true"
+          charset: utf8mb4
+      business:
+        host: ${MYSQL_HOST}
+        port: ${MYSQL_PORT}
+        user: ${MYSQL_USER}
+        password: ${MYSQL_PASS}
+        database: nova_energy_cloud
+        params:
+          parseTime: "true"
+          charset: utf8mb4
+
+    iotdb:
+      host: ${IOTDB_HOST}
+      port: ${IOTDB_PORT}
+      user: ${IOTDB_USER}
+      password: ${IOTDB_PASS}
+      fetch_size: 1024
+      zone_id: UTC+08:00
+      enable_tls: false
+      enable_zstd: false
+
+    metrics:
+      - name: energy_household_total
+        help: 户储设备总量
+        source: mysql
+        query: >
+          SELECT COUNT(1) FROM equipment_equipment
+        labels:
+          region: china
+          category: residential
+
+      - name: energy_household_online
+        help: 户储在线设备总量
+        source: mysql
+        query: >
+          SELECT COUNT(1) FROM equipment_equipment WHERE online_status = 2
+        labels:
+          region: china
+          category: residential
+          status: online
+
+      - name: energy_business_total
+        help: 工商业储能设备数
+        source: mysql
+        query: >
+          SELECT COUNT(1) FROM station_device
+        connection: business
+        labels:
+          region: china
+          category: commercial
+
+      - name: energy_business_reporting
+        help: 工商业储能上报设备数
+        source: iotdb
+        query: >
+          COUNT NODES root.energy.sn*.** LEVEL=2
+        result_field: "count(nodes)"
+        labels:
+          region: china
+          category: commercial
+          status: reporting

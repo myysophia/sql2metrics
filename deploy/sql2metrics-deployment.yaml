@@ -1,0 +1,85 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sql2metrics
+  labels:
+    app: sql2metrics
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sql2metrics
+  template:
+    metadata:
+      labels:
+        app: sql2metrics
+    spec:
+      containers:
+        - name: sql2metrics
+          image: sql2metrics:latest
+          imagePullPolicy: IfNotPresent
+          args:
+            - "-config"
+            - "/etc/sql2metrics/config.yml"
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: MYSQL_HOST
+              value: "mysql.internal"
+            - name: MYSQL_PORT
+              value: "3306"
+            - name: MYSQL_USER
+              valueFrom:
+                secretKeyRef:
+                  name: sql2metrics-secrets
+                  key: mysql-user
+            - name: MYSQL_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: sql2metrics-secrets
+                  key: mysql-pass
+            - name: IOTDB_HOST
+              value: "iotdb.internal"
+            - name: IOTDB_PORT
+              value: "6667"
+            - name: IOTDB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: sql2metrics-secrets
+                  key: iotdb-user
+            - name: IOTDB_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: sql2metrics-secrets
+                  key: iotdb-pass
+          volumeMounts:
+            - name: sql2metrics-config
+              mountPath: /etc/sql2metrics
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 60
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+      volumes:
+        - name: sql2metrics-config
+          configMap:
+            name: sql2metrics-config
+            items:
+              - key: config.yml
+                path: config.yml
