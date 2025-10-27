@@ -3,6 +3,9 @@
 ## 项目简介
 sql2metrics 是一个以配置驱动的 Prometheus 指标采集器，能够定时执行数据库查询（当前支持 MySQL 与 IoTDB），并将结果转换为 Prometheus Metrics 暴露在 `/metrics` 端点。适用于快速将现有业务 SQL 转换为可监控的时间序列，用于观察趋势、告警与容量分析。
 
+<img width="1754" height="891" alt="image" src="https://github.com/user-attachments/assets/68ccd77d-d4c0-44c5-a69e-0e8ce4051844" />
+
+
 ## 核心特性
 - **配置驱动**：全部指标、SQL、连接信息通过 YAML 描述，新增监控无需改动代码。
 - **多数据源支持**：同一进程内可连接多个 MySQL 数据库及 IoTDB，按指标选择数据源。
