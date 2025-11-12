@@ -12,13 +12,21 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 
+	"github.com/company/ems-devices/internal/api"
 	"github.com/company/ems-devices/internal/collectors"
 	"github.com/company/ems-devices/internal/config"
 )
 
 func main() {
+	// 清除代理设置（避免数据库连接被代理拦截）
+	os.Unsetenv("http_proxy")
+	os.Unsetenv("https_proxy")
+	os.Unsetenv("HTTP_PROXY")
+	os.Unsetenv("HTTPS_PROXY")
+	os.Unsetenv("all_proxy")
+	os.Unsetenv("ALL_PROXY")
+
 	if err := loadEnv(); err != nil {
 		log.Fatalf("加载环境变量失败: %v", err)
 	}
@@ -44,12 +52,12 @@ func main() {
 	// 启动采集主循环。
 	go service.Run(ctx)
 
-	// 暴露 Prometheus 指标。
-	mux := http.NewServeMux()
-	mux.Handle("/metrics", promhttp.Handler())
+	// 暴露 Prometheus 指标和 API。
+	apiServer := api.NewServer(configPath, service)
+	
 	server := &http.Server{
 		Addr:    cfg.Prometheus.ListenAddr(),
-		Handler: mux,
+		Handler: apiServer,
 	}
 
 	go func() {

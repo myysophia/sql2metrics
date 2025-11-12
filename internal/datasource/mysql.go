@@ -30,8 +30,12 @@ func NewMySQLClient(cfg config.MySQLConfig) (*MySQLClient, error) {
 	db.SetConnMaxLifetime(30 * time.Minute)
 	db.SetMaxIdleConns(2)
 	db.SetMaxOpenConns(5)
-
-	if err := db.Ping(); err != nil {
+	
+	// 设置连接超时上下文，避免启动时长时间阻塞
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	
+	if err := db.PingContext(ctx); err != nil {
 		return nil, fmt.Errorf("MySQL 连接验证失败: %w", err)
 	}
 	return &MySQLClient{db: db}, nil
@@ -52,4 +56,9 @@ func (c *MySQLClient) QueryScalar(ctx context.Context, sqlStmt string) (float64,
 // Close 收回底层资源。
 func (c *MySQLClient) Close() error {
 	return c.db.Close()
+}
+
+// Ping 测试数据库连接。
+func (c *MySQLClient) Ping(ctx context.Context) error {
+	return c.db.PingContext(ctx)
 }

@@ -1,9 +1,11 @@
 package config
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -11,57 +13,114 @@ import (
 
 // Config 描述采集服务的整体配置。
 type Config struct {
-	Schedule         ScheduleConfig         `yaml:"schedule"`
-	Prometheus       PrometheusConfig       `yaml:"prometheus"`
-	MySQL            MySQLConfig            `yaml:"mysql"`
-	MySQLConnections map[string]MySQLConfig `yaml:"mysql_connections"`
-	IoTDB            IoTDBConfig            `yaml:"iotdb"`
-	Metrics          []MetricSpec           `yaml:"metrics"`
+	Schedule         ScheduleConfig         `yaml:"schedule" json:"schedule"`
+	Prometheus       PrometheusConfig       `yaml:"prometheus" json:"prometheus"`
+	MySQL            MySQLConfig            `yaml:"mysql" json:"mysql"`
+	MySQLConnections map[string]MySQLConfig `yaml:"mysql_connections" json:"mysql_connections"`
+	IoTDB            IoTDBConfig            `yaml:"iotdb" json:"iotdb"`
+	Metrics          []MetricSpec           `yaml:"metrics" json:"metrics"`
 }
 
 // ScheduleConfig 控制采集周期。
 type ScheduleConfig struct {
-	Interval string `yaml:"interval"`
+	Interval string `yaml:"interval" json:"interval"`
 }
 
 // PrometheusConfig 定义暴露指标的方式。
 type PrometheusConfig struct {
-	ListenAddress string `yaml:"listen_address"`
-	ListenPort    int    `yaml:"listen_port"`
+	ListenAddress string `yaml:"listen_address" json:"listen_address"`
+	ListenPort    int    `yaml:"listen_port" json:"listen_port"`
 }
 
 // MySQLConfig 填写 MySQL 连接与查询所需信息。
 type MySQLConfig struct {
-	Host     string            `yaml:"host"`
-	Port     int               `yaml:"port"`
-	User     string            `yaml:"user"`
-	Password string            `yaml:"password"`
-	Database string            `yaml:"database"`
-	Params   map[string]string `yaml:"params"`
+	Host     string            `yaml:"host" json:"host"`
+	Port     int               `yaml:"port" json:"port"`
+	User     string            `yaml:"user" json:"user"`
+	Password string            `yaml:"password" json:"password"`
+	Database string            `yaml:"database" json:"database"`
+	Params   map[string]string `yaml:"params" json:"params,omitempty"`
 }
 
 // IoTDBConfig 填写 IoTDB Session 连接信息。
 type IoTDBConfig struct {
-	Host        string `yaml:"host"`
-	Port        int    `yaml:"port"`
-	User        string `yaml:"user"`
-	Password    string `yaml:"password"`
-	FetchSize   int    `yaml:"fetch_size"`
-	ZoneID      string `yaml:"zone_id"`
-	EnableTLS   bool   `yaml:"enable_tls"`
-	EnableZstd  bool   `yaml:"enable_zstd"`
-	SessionPool int    `yaml:"session_pool"`
+	Host        string `yaml:"host" json:"host"`
+	Port        int    `yaml:"port" json:"port"`
+	User        string `yaml:"user" json:"user"`
+	Password    string `yaml:"password" json:"password"`
+	FetchSize   int    `yaml:"fetch_size" json:"fetch_size"`
+	ZoneID      string `yaml:"zone_id" json:"zone_id"`
+	EnableTLS   bool   `yaml:"enable_tls" json:"enable_tls"`
+	EnableZstd  bool   `yaml:"enable_zstd" json:"enable_zstd"`
+	SessionPool int    `yaml:"session_pool" json:"session_pool,omitempty"`
 }
 
 // MetricSpec 定义单个指标查询的元数据。
 type MetricSpec struct {
-	Name        string            `yaml:"name"`
-	Help        string            `yaml:"help"`
-	Source      string            `yaml:"source"`
-	Query       string            `yaml:"query"`
-	Labels      map[string]string `yaml:"labels"`
-	ResultField string            `yaml:"result_field"`
-	Connection  string            `yaml:"connection"`
+	Name        string            `yaml:"name" json:"name"`
+	Help        string            `yaml:"help" json:"help"`
+	Type        string            `yaml:"type" json:"type"` // gauge/counter/histogram/summary，默认为 gauge
+	Source      string            `yaml:"source" json:"source"`
+	Query       string            `yaml:"query" json:"query"`
+	Labels      map[string]string `yaml:"labels" json:"labels,omitempty"`
+	ResultField string            `yaml:"result_field" json:"result_field,omitempty"`
+	Connection  string            `yaml:"connection" json:"connection,omitempty"`
+	// Histogram/Summary 特定配置
+	Buckets    []float64         `yaml:"buckets,omitempty" json:"buckets,omitempty"`     // Histogram 分桶
+	Objectives map[float64]float64 `yaml:"objectives,omitempty" json:"-"`                 // Summary 分位数目标（JSON 序列化通过 ObjectivesJSON）
+}
+
+// ObjectivesJSON 用于 JSON 序列化的 objectives（使用字符串 key）
+type ObjectivesJSON map[string]float64
+
+// MarshalJSON 实现自定义 JSON 序列化
+func (m MetricSpec) MarshalJSON() ([]byte, error) {
+	type Alias MetricSpec
+	aux := &struct {
+		Objectives ObjectivesJSON `json:"objectives,omitempty"`
+		*Alias
+	}{
+		Alias: (*Alias)(&m),
+	}
+	
+	// 转换 objectives 为字符串 key
+	if m.Objectives != nil && len(m.Objectives) > 0 {
+		aux.Objectives = make(ObjectivesJSON)
+		for k, v := range m.Objectives {
+			aux.Objectives[fmt.Sprintf("%g", k)] = v
+		}
+	}
+	
+	return json.Marshal(aux)
+}
+
+// UnmarshalJSON 实现自定义 JSON 反序列化
+func (m *MetricSpec) UnmarshalJSON(data []byte) error {
+	type Alias MetricSpec
+	aux := &struct {
+		Objectives ObjectivesJSON `json:"objectives,omitempty"`
+		*Alias
+	}{
+		Alias: (*Alias)(m),
+	}
+	
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	
+	// 转换 objectives 回 float64 key
+	if aux.Objectives != nil && len(aux.Objectives) > 0 {
+		m.Objectives = make(map[float64]float64)
+		for k, v := range aux.Objectives {
+			key, err := strconv.ParseFloat(k, 64)
+			if err != nil {
+				return fmt.Errorf("解析 objectives key 失败: %w", err)
+			}
+			m.Objectives[key] = v
+		}
+	}
+	
+	return nil
 }
 
 // Load 读取并解析 YAML 配置文件。
@@ -77,7 +136,7 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("解析配置文件失败: %w", err)
 	}
 
-	if err := cfg.applyDefaults(); err != nil {
+	if err := cfg.ApplyDefaults(); err != nil {
 		return nil, err
 	}
 
@@ -158,6 +217,22 @@ func (c *Config) Validate() error {
 		if m.Query == "" {
 			return fmt.Errorf("指标 %s 缺少查询语句", m.Name)
 		}
+		// 验证指标类型
+		metricType := m.Type
+		if metricType == "" {
+			metricType = "gauge"
+		}
+		if metricType != "gauge" && metricType != "counter" && metricType != "histogram" && metricType != "summary" {
+			return fmt.Errorf("指标 %s 的类型非法: %s，支持的类型: gauge, counter, histogram, summary", m.Name, metricType)
+		}
+		// Histogram 需要 buckets
+		if metricType == "histogram" && len(m.Buckets) == 0 {
+			return fmt.Errorf("指标 %s 类型为 histogram，但未配置 buckets", m.Name)
+		}
+		// Summary 需要 objectives
+		if metricType == "summary" && len(m.Objectives) == 0 {
+			return fmt.Errorf("指标 %s 类型为 summary，但未配置 objectives", m.Name)
+		}
 		if m.Source == "mysql" {
 			conn := m.Connection
 			if conn == "" {
@@ -171,7 +246,8 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-func (c *Config) applyDefaults() error {
+// ApplyDefaults 应用默认值到配置。
+func (c *Config) ApplyDefaults() error {
 	if c.Schedule.Interval == "" {
 		c.Schedule.Interval = "1h"
 	}
@@ -192,6 +268,12 @@ func (c *Config) applyDefaults() error {
 	if c.IoTDB.ZoneID == "" {
 		c.IoTDB.ZoneID = "UTC+08:00"
 	}
+	// 为指标设置默认类型
+	for i := range c.Metrics {
+		if c.Metrics[i].Type == "" {
+			c.Metrics[i].Type = "gauge"
+		}
+	}
 	return nil
 }
 
@@ -205,4 +287,16 @@ func (c *Config) MySQLConfigFor(name string) (MySQLConfig, bool) {
 	}
 	conf, ok := c.MySQLConnections[name]
 	return conf, ok
+}
+
+// Save 将配置保存到文件。
+func (c *Config) Save(path string) error {
+	data, err := yaml.Marshal(c)
+	if err != nil {
+		return fmt.Errorf("序列化配置失败: %w", err)
+	}
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		return fmt.Errorf("写入配置文件失败: %w", err)
+	}
+	return nil
 }

@@ -45,8 +45,9 @@ func NewIoTDBClient(cfg config.IoTDBConfig) (*IoTDBClient, error) {
 	}
 	sess := client.NewSession(conf)
 	session := &sess
-	// 0 表示不设置连接超时，避免大查询拉长时间。
-	if err := session.Open(cfg.EnableZstd, 0); err != nil {
+	// 设置连接超时为 5 秒，避免启动时长时间阻塞
+	timeout := 5000 // 5 秒超时（毫秒）
+	if err := session.Open(cfg.EnableZstd, timeout); err != nil {
 		return nil, fmt.Errorf("打开 IoTDB 会话失败: %w", err)
 	}
 	return &IoTDBClient{session: session}, nil
