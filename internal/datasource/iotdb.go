@@ -53,6 +53,27 @@ func NewIoTDBClient(cfg config.IoTDBConfig) (*IoTDBClient, error) {
 	return &IoTDBClient{session: session}, nil
 }
 
+// TestConnection 测试 IoTDB 连接，使用 show databases 命令。
+func (c *IoTDBClient) TestConnection(ctx context.Context) error {
+	if c.session == nil {
+		return errors.New("IoTDB 会话未初始化")
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+	// 使用 show databases 来测试连接
+	dataSet, err := c.session.ExecuteQueryStatement("show databases", nil)
+	if err != nil {
+		return fmt.Errorf("执行 IoTDB 查询失败: %w", err)
+	}
+	if dataSet != nil {
+		defer dataSet.Close()
+	}
+	return nil
+}
+
 // QueryScalar 执行查询并解析单值结果。
 func (c *IoTDBClient) QueryScalar(ctx context.Context, sqlStmt, resultField string) (float64, error) {
 	// IoTDB Session 当前不支持 context 取消，此处仅用于对齐接口。

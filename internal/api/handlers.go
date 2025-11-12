@@ -146,18 +146,14 @@ func (s *Server) handleTestIoTDB(w http.ResponseWriter, r *http.Request) {
 	}
 	defer client.Close()
 
-	// 执行一个简单的查询来测试连接
-	_, err = client.QueryScalar(ctx, "SHOW VERSION", "")
+	// 使用 show databases 来测试连接
+	err = client.TestConnection(ctx)
 	if err != nil {
-		// 如果 SHOW VERSION 失败，尝试其他简单查询
-		_, err = client.QueryScalar(ctx, "SELECT 1", "")
-		if err != nil {
-			s.writeJSON(w, http.StatusOK, map[string]interface{}{
-				"success": false,
-				"error":   fmt.Sprintf("IoTDB 连接测试失败: %v", err),
-			})
-			return
-		}
+		s.writeJSON(w, http.StatusOK, map[string]interface{}{
+			"success": false,
+			"error":   fmt.Sprintf("IoTDB 连接测试失败: %v", err),
+		})
+		return
 	}
 
 	s.writeJSON(w, http.StatusOK, map[string]interface{}{
