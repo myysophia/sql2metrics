@@ -5,6 +5,13 @@ sql2metrics 是一个以配置驱动的 Prometheus 指标采集器，能够定�
 
 <img width="1305" height="623" alt="image" src="https://github.com/user-attachments/assets/02b7fdac-62c2-443b-9bbf-97f4f328aa04" />
 
+<img width="1349" height="556" alt="image" src="https://github.com/user-attachments/assets/1bf4a2e1-442b-46a3-a3d5-9ae735efbfc4" />
+
+
+<img width="1126" height="641" alt="image" src="https://github.com/user-attachments/assets/9267ce34-945f-4614-8c06-003eb021edea" />
+
+<img width="1413" height="526" alt="image" src="https://github.com/user-attachments/assets/1a5ee7cf-2491-4578-b3f2-c3428857f416" />
+
 
 前端UI配置
 
