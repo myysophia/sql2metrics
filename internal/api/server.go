@@ -61,6 +61,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.handleTestMySQL(w, r)
 	case path == "/api/datasource/test/iotdb" && r.Method == "POST":
 		s.handleTestIoTDB(w, r)
+	case path == "/api/datasource/test/http_api" && r.Method == "POST":
+		s.handleTestHTTPAPI(w, r)
 	case path == "/api/datasource/query/preview" && r.Method == "POST":
 		s.handlePreviewQuery(w, r)
 	case path == "/api/metrics" && r.Method == "GET":

@@ -45,6 +45,17 @@ iotdb:
   enable_tls: false
   enable_zstd: false
 
+http_api:
+  url: https://control.pingjl.com/mqtt/control/v1/
+  method: GET
+  timeout: 10
+
+http_api_connections:
+  default:
+    url: https://control.pingjl.com/mqtt/control/v1/
+    method: GET
+    timeout: 10
+
 metrics:
   - name: energy_household_total
     help: 户储设备总量
@@ -85,3 +96,13 @@ metrics:
       region: china
       category: commercial
       status: reporting
+
+  - name: mqtt_auth_url
+    help: MQTT 认证 URL
+    source: http_api
+    query: https://control.pingjl.com/mqtt/control/v1/
+    result_field: main.mqttAuthUrl
+    connection: default
+    labels:
+      service: mqtt
+      type: config

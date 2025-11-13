@@ -1,4 +1,4 @@
-import type { Config, MetricSpec, MySQLConfig, IoTDBConfig, ReloadResult } from '../types/config'
+import type { Config, MetricSpec, MySQLConfig, IoTDBConfig, HTTPAPIConfig, ReloadResult } from '../types/config'
 
 const API_BASE = '/api'
 
@@ -48,13 +48,20 @@ export const api = {
       body: JSON.stringify(config),
     }),
   
+  testHTTPAPI: (config: HTTPAPIConfig) =>
+    request<{ success: boolean; error?: string; message?: string }>('/datasource/test/http_api', {
+      method: 'POST',
+      body: JSON.stringify(config),
+    }),
+  
   previewQuery: (params: {
-    source: 'mysql' | 'iotdb'
+    source: 'mysql' | 'iotdb' | 'http_api'
     query: string
     connection?: string
     result_field?: string
     mysql_config?: MySQLConfig
     iotdb_config?: IoTDBConfig
+    http_api_config?: HTTPAPIConfig
   }) =>
     request<{ success: boolean; value?: number; error?: string }>('/datasource/query/preview', {
       method: 'POST',
