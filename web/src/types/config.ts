@@ -28,11 +28,18 @@ export interface IoTDBConfig {
   session_pool?: number
 }
 
+export interface HTTPAPIConfig {
+  url: string
+  method?: string
+  headers?: Record<string, string>
+  timeout?: number
+}
+
 export interface MetricSpec {
   name: string
   help: string
   type: 'gauge' | 'counter' | 'histogram' | 'summary'
-  source: 'mysql' | 'iotdb'
+  source: 'mysql' | 'iotdb' | 'http_api'
   query: string
   labels?: Record<string, string>
   result_field?: string
@@ -47,6 +54,8 @@ export interface Config {
   mysql: MySQLConfig
   mysql_connections: Record<string, MySQLConfig>
   iotdb: IoTDBConfig
+  http_api?: HTTPAPIConfig
+  http_api_connections?: Record<string, HTTPAPIConfig>
   metrics: MetricSpec[]
 }
 

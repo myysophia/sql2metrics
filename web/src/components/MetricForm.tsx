@@ -60,6 +60,7 @@ export default function MetricForm({ metric: initialMetric, config, onSave, onCa
   }
 
   const mysqlConnections = Object.keys(config.mysql_connections || {})
+  const httpapiConnections = Object.keys(config.http_api_connections || {})
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
@@ -118,11 +119,12 @@ export default function MetricForm({ metric: initialMetric, config, onSave, onCa
           </label>
           <select
             value={metric.source}
-            onChange={(e) => setMetric({ ...metric, source: e.target.value as 'mysql' | 'iotdb' })}
+            onChange={(e) => setMetric({ ...metric, source: e.target.value as 'mysql' | 'iotdb' | 'http_api' })}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus-visible-ring"
           >
             <option value="mysql">MySQL</option>
             <option value="iotdb">IoTDB</option>
+            <option value="http_api">HTTP API</option>
           </select>
         </div>
 
@@ -143,48 +145,102 @@ export default function MetricForm({ metric: initialMetric, config, onSave, onCa
           </div>
         )}
 
-        {metric.source === 'iotdb' && (
+        {metric.source === 'http_api' && httpapiConnections.length > 0 && (
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">结果字段</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">连接</label>
+            <select
+              value={metric.connection || 'default'}
+              onChange={(e) => setMetric({ ...metric, connection: e.target.value || undefined })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus-visible-ring"
+            >
+              {httpapiConnections.map((conn) => (
+                <option key={conn} value={conn}>
+                  {conn}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {(metric.source === 'iotdb' || metric.source === 'http_api') && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              {metric.source === 'http_api' ? 'JSON 路径' : '结果字段'} <span className="text-red-500">{metric.source === 'http_api' ? '*' : ''}</span>
+            </label>
             <input
               type="text"
               value={metric.result_field || ''}
               onChange={(e) => setMetric({ ...metric, result_field: e.target.value || undefined })}
+              required={metric.source === 'http_api'}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus-visible-ring"
-              placeholder="留空则使用第一列"
+              placeholder={metric.source === 'http_api' ? 'main.mqttAuthUrl' : '留空则使用第一列'}
             />
+            {metric.source === 'http_api' && (
+              <p className="mt-1 text-xs text-gray-500">使用点号分隔的路径，如 main.mqttAuthUrl</p>
+            )}
           </div>
         )}
       </div>
 
-      <div>
-        <div className="flex justify-between items-center mb-2">
-          <label className="block text-sm font-medium text-gray-700">
-            SQL 查询 <span className="text-red-500">*</span>
+      {metric.source === 'http_api' ? (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            查询 URL <span className="text-red-500">*</span>
           </label>
+          <input
+            type="url"
+            value={metric.query}
+            onChange={(e) => setMetric({ ...metric, query: e.target.value })}
+            required
+            placeholder="https://control.pingjl.com/mqtt/control/v1/"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus-visible-ring"
+          />
+          <p className="mt-1 text-xs text-gray-500">如果为空，将使用连接配置中的 URL</p>
+        </div>
+      ) : (
+        <div>
+          <div className="flex justify-between items-center mb-2">
+            <label className="block text-sm font-medium text-gray-700">
+              SQL 查询 <span className="text-red-500">*</span>
+            </label>
+            <button
+              type="button"
+              onClick={() => previewMutation.mutate()}
+              disabled={previewing || !metric.query}
+              className="px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300 disabled:opacity-50 focus-visible-ring"
+            >
+              {previewing ? '预览中…' : '预览查询'}
+            </button>
+          </div>
+          <div className="border border-gray-300 rounded-md overflow-hidden">
+            <Editor
+              height="200px"
+              defaultLanguage="sql"
+              value={metric.query}
+              onChange={(value) => setMetric({ ...metric, query: value || '' })}
+              options={{
+                minimap: { enabled: false },
+                fontSize: 14,
+                lineNumbers: 'on',
+                scrollBeyondLastLine: false,
+              }}
+            />
+          </div>
+        </div>
+      )}
+      
+      {metric.source === 'http_api' && (
+        <div>
           <button
             type="button"
             onClick={() => previewMutation.mutate()}
-            disabled={previewing || !metric.query}
+            disabled={previewing || !metric.result_field}
             className="px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300 disabled:opacity-50 focus-visible-ring"
           >
             {previewing ? '预览中…' : '预览查询'}
           </button>
         </div>
-        <div className="border border-gray-300 rounded-md overflow-hidden">
-          <Editor
-            height="200px"
-            defaultLanguage="sql"
-            value={metric.query}
-            onChange={(value) => setMetric({ ...metric, query: value || '' })}
-            options={{
-              minimap: { enabled: false },
-              fontSize: 14,
-              lineNumbers: 'on',
-              scrollBeyondLastLine: false,
-            }}
-          />
-        </div>
+      )}
         {previewResult && (
           <div className={`mt-2 p-2 rounded ${previewResult.success ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>
             {previewResult.success ? (

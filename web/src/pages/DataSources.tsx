@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { api } from '../api/client'
-import type { Config, MySQLConfig, IoTDBConfig } from '../types/config'
+import type { Config, MySQLConfig, IoTDBConfig, HTTPAPIConfig } from '../types/config'
 import DataSourceForm from '../components/DataSourceForm'
 
 export default function DataSources() {
@@ -13,6 +13,7 @@ export default function DataSources() {
 
   const [editingMySQL, setEditingMySQL] = useState<string | null>(null)
   const [editingIoTDB, setEditingIoTDB] = useState(false)
+  const [editingHTTPAPI, setEditingHTTPAPI] = useState<string | null>(null)
 
   const updateConfigMutation = useMutation({
     mutationFn: (newConfig: Config) => api.updateConfig(newConfig),
@@ -20,6 +21,7 @@ export default function DataSources() {
       queryClient.invalidateQueries({ queryKey: ['config'] })
       setEditingMySQL(null)
       setEditingIoTDB(false)
+      setEditingHTTPAPI(null)
     },
   })
 
@@ -54,6 +56,29 @@ export default function DataSources() {
     const newConfig: Config = {
       ...config,
       mysql_connections: newConnections,
+    }
+    updateConfigMutation.mutate(newConfig)
+  }
+
+  const handleSaveHTTPAPI = (name: string, httpapiConfig: HTTPAPIConfig) => {
+    const newConfig: Config = {
+      ...config,
+      http_api_connections: {
+        ...config.http_api_connections,
+        [name]: httpapiConfig,
+      },
+    }
+    updateConfigMutation.mutate(newConfig)
+  }
+
+  const handleDeleteHTTPAPI = (name: string) => {
+    if (!confirm(`确定要删除 HTTP API 连接 "${name}" 吗？`)) return
+
+    const newConnections = { ...(config.http_api_connections || {}) }
+    delete newConnections[name]
+    const newConfig: Config = {
+      ...config,
+      http_api_connections: newConnections,
     }
     updateConfigMutation.mutate(newConfig)
   }
@@ -146,6 +171,62 @@ export default function DataSources() {
             <div>时区: {config.iotdb.zone_id}</div>
           </div>
         )}
+      </div>
+
+      {/* HTTP API 连接 */}
+      <div className="bg-white rounded-lg shadow p-6 mt-6">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-semibold">HTTP API 连接</h3>
+          <button
+            onClick={() => {
+              const name = prompt('请输入连接名称:')
+              if (name) setEditingHTTPAPI(name)
+            }}
+            className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 focus-visible-ring"
+          >
+            添加连接
+          </button>
+        </div>
+
+        <div className="space-y-4">
+          {Object.entries(config.http_api_connections || {}).map(([name, httpapiConfig]) => (
+            <div key={name} className="border border-gray-200 rounded-lg p-4">
+              <div className="flex justify-between items-center mb-2">
+                <h4 className="font-medium">{name}</h4>
+                <div className="space-x-2">
+                  <button
+                    onClick={() => setEditingHTTPAPI(name)}
+                    className="text-primary-600 hover:text-primary-700 focus-visible-ring"
+                  >
+                    编辑
+                  </button>
+                  {name !== 'default' && (
+                    <button
+                      onClick={() => handleDeleteHTTPAPI(name)}
+                      className="text-red-600 hover:text-red-700 focus-visible-ring"
+                    >
+                      删除
+                    </button>
+                  )}
+                </div>
+              </div>
+              {editingHTTPAPI === name ? (
+                <DataSourceForm
+                  type="http_api"
+                  initialConfig={httpapiConfig}
+                  onSave={(cfg) => handleSaveHTTPAPI(name, cfg as HTTPAPIConfig)}
+                  onCancel={() => setEditingHTTPAPI(null)}
+                />
+              ) : (
+                <div className="text-sm text-gray-600">
+                  <div>URL: {httpapiConfig.url}</div>
+                  <div>方法: {httpapiConfig.method || 'GET'}</div>
+                  <div>超时: {httpapiConfig.timeout || 10}秒</div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   )
