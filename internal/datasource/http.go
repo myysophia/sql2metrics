@@ -46,9 +46,19 @@ func NewHTTPAPIClient(cfg config.HTTPAPIConfig) (*HTTPAPIClient, error) {
 
 // QueryScalar 执行 HTTP 请求并从 JSON 响应中提取指定路径的值。
 // jsonPath 支持点号分隔的嵌套路径，如 "main.mqttAuthUrl"
-func (c *HTTPAPIClient) QueryScalar(ctx context.Context, jsonPath string) (float64, error) {
+// url 是可选的，如果为空则使用连接配置中的 URL
+func (c *HTTPAPIClient) QueryScalar(ctx context.Context, jsonPath string, url ...string) (float64, error) {
 	if jsonPath == "" {
 		return 0, errors.New("JSON 路径不能为空")
+	}
+
+	// 确定使用的 URL：优先使用传入的 url，否则使用配置中的 URL
+	targetURL := c.config.URL
+	if len(url) > 0 && url[0] != "" {
+		targetURL = url[0]
+	}
+	if targetURL == "" {
+		return 0, errors.New("URL 不能为空")
 	}
 
 	// 创建 HTTP 请求
@@ -57,7 +67,7 @@ func (c *HTTPAPIClient) QueryScalar(ctx context.Context, jsonPath string) (float
 		method = "GET"
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, c.config.URL, nil)
+	req, err := http.NewRequestWithContext(ctx, method, targetURL, nil)
 	if err != nil {
 		return 0, fmt.Errorf("创建 HTTP 请求失败: %w", err)
 	}

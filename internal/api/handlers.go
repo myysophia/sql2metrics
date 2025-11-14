@@ -310,12 +310,15 @@ func (s *Server) handlePreviewQuery(w http.ResponseWriter, r *http.Request) {
 			defer client.Close()
 		}
 		// 对于 HTTP API，ResultField 存储 JSON 路径
+		// Query 字段存储 URL（可选，如果为空则使用连接配置的 URL）
 		jsonPath := req.ResultField
 		if jsonPath == "" {
 			s.writeError(w, http.StatusBadRequest, "HTTP API 预览需要指定 result_field（JSON 路径）")
 			return
 		}
-		value, err = client.QueryScalar(ctx, jsonPath)
+		// 使用 req.Query 作为 URL（如果提供），否则使用连接配置的 URL
+		queryURL := req.Query
+		value, err = client.QueryScalar(ctx, jsonPath, queryURL)
 	default:
 		s.writeError(w, http.StatusBadRequest, fmt.Sprintf("不支持的数据源: %s", req.Source))
 		return

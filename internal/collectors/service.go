@@ -281,8 +281,14 @@ func (s *Service) queryMetric(ctx context.Context, spec config.MetricSpec) (floa
 		if jsonPath == "" {
 			return 0, fmt.Errorf("HTTP API 指标 %s 缺少 result_field（JSON 路径）", spec.Name)
 		}
-		log.Printf("执行 HTTP API 查询（连接=%s，JSON 路径=%s）", conn, jsonPath)
-		return client.QueryScalar(ctx, jsonPath)
+		// 使用 spec.Query 作为 URL（如果提供），否则使用连接配置的 URL
+		queryURL := spec.Query
+		if queryURL != "" {
+			log.Printf("执行 HTTP API 查询（连接=%s，URL=%s，JSON 路径=%s）", conn, queryURL, jsonPath)
+		} else {
+			log.Printf("执行 HTTP API 查询（连接=%s，使用连接配置 URL，JSON 路径=%s）", conn, jsonPath)
+		}
+		return client.QueryScalar(ctx, jsonPath, queryURL)
 	default:
 		return 0, ErrDataSourceUnavailable(spec.Source)
 	}
