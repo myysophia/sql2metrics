@@ -18,6 +18,8 @@ type Config struct {
 	MySQL            MySQLConfig            `yaml:"mysql" json:"mysql"`
 	MySQLConnections map[string]MySQLConfig `yaml:"mysql_connections" json:"mysql_connections"`
 	IoTDB            IoTDBConfig            `yaml:"iotdb" json:"iotdb"`
+	HTTPAPI          HTTPAPIConfig          `yaml:"http_api" json:"http_api"`
+	HTTPAPIConnections map[string]HTTPAPIConfig `yaml:"http_api_connections" json:"http_api_connections"`
 	Metrics          []MetricSpec           `yaml:"metrics" json:"metrics"`
 }
 
@@ -53,6 +55,14 @@ type IoTDBConfig struct {
 	EnableTLS   bool   `yaml:"enable_tls" json:"enable_tls"`
 	EnableZstd  bool   `yaml:"enable_zstd" json:"enable_zstd"`
 	SessionPool int    `yaml:"session_pool" json:"session_pool,omitempty"`
+}
+
+// HTTPAPIConfig 填写 HTTP API 连接信息。
+type HTTPAPIConfig struct {
+	URL     string            `yaml:"url" json:"url"`
+	Method  string            `yaml:"method" json:"method"` // GET, POST, etc. 默认为 GET
+	Headers map[string]string `yaml:"headers" json:"headers,omitempty"`
+	Timeout int               `yaml:"timeout" json:"timeout"` // 超时时间（秒），默认 10
 }
 
 // MetricSpec 定义单个指标查询的元数据。
@@ -211,10 +221,10 @@ func (c *Config) Validate() error {
 		if m.Name == "" {
 			return errors.New("指标名称不能为空")
 		}
-		if m.Source != "mysql" && m.Source != "iotdb" {
-			return fmt.Errorf("指标 %s 的 source 非法: %s", m.Name, m.Source)
+		if m.Source != "mysql" && m.Source != "iotdb" && m.Source != "http_api" {
+			return fmt.Errorf("指标 %s 的 source 非法: %s，支持的类型: mysql, iotdb, http_api", m.Name, m.Source)
 		}
-		if m.Query == "" {
+		if m.Query == "" && m.Source != "http_api" {
 			return fmt.Errorf("指标 %s 缺少查询语句", m.Name)
 		}
 		// 验证指标类型
@@ -242,6 +252,25 @@ func (c *Config) Validate() error {
 				return fmt.Errorf("指标 %s 引用的 MySQL 连接 %s 未配置", m.Name, conn)
 			}
 		}
+		if m.Source == "http_api" {
+			conn := m.Connection
+			if conn == "" {
+				conn = "default"
+			}
+			if c.HTTPAPIConnections == nil {
+				c.HTTPAPIConnections = make(map[string]HTTPAPIConfig)
+			}
+			if _, ok := c.HTTPAPIConnections[conn]; !ok {
+				// 检查是否有默认配置
+				if c.HTTPAPI.URL == "" {
+					return fmt.Errorf("指标 %s 引用的 HTTP API 连接 %s 未配置", m.Name, conn)
+				}
+			}
+			// HTTP API 需要指定 JSON 路径（通过 ResultField）
+			if m.ResultField == "" {
+				return fmt.Errorf("指标 %s 使用 http_api 数据源，必须指定 result_field（JSON 路径）", m.Name)
+			}
+		}
 	}
 	return nil
 }
@@ -260,6 +289,14 @@ func (c *Config) ApplyDefaults() error {
 	if _, ok := c.MySQLConnections["default"]; !ok {
 		if c.MySQL.Host != "" || c.MySQL.User != "" || c.MySQL.Database != "" {
 			c.MySQLConnections["default"] = c.MySQL
+		}
+	}
+	if c.HTTPAPIConnections == nil {
+		c.HTTPAPIConnections = make(map[string]HTTPAPIConfig)
+	}
+	if _, ok := c.HTTPAPIConnections["default"]; !ok {
+		if c.HTTPAPI.URL != "" {
+			c.HTTPAPIConnections["default"] = c.HTTPAPI
 		}
 	}
 	if c.IoTDB.FetchSize == 0 {
@@ -286,6 +323,18 @@ func (c *Config) MySQLConfigFor(name string) (MySQLConfig, bool) {
 		return MySQLConfig{}, false
 	}
 	conf, ok := c.MySQLConnections[name]
+	return conf, ok
+}
+
+// HTTPAPIConfigFor 返回指定名称的 HTTP API 配置，默认为 default。
+func (c *Config) HTTPAPIConfigFor(name string) (HTTPAPIConfig, bool) {
+	if name == "" {
+		name = "default"
+	}
+	if c.HTTPAPIConnections == nil {
+		return HTTPAPIConfig{}, false
+	}
+	conf, ok := c.HTTPAPIConnections[name]
 	return conf, ok
 }
 

@@ -21,6 +21,7 @@ type Service struct {
 	cfg        *config.Config
 	mysql      map[string]*datasource.MySQLClient
 	iotdb      *datasource.IoTDBClient
+	httpapi    map[string]*datasource.HTTPAPIClient
 	metrics    []metricHolder
 	errorCount prometheus.Counter
 	lastRun    prometheus.Gauge
@@ -39,6 +40,7 @@ func NewService(cfg *config.Config) (*Service, error) {
 	svc := &Service{
 		cfg:      cfg,
 		mysql:    make(map[string]*datasource.MySQLClient),
+		httpapi:  make(map[string]*datasource.HTTPAPIClient),
 		registry: prometheus.NewRegistry(),
 	}
 	
@@ -64,6 +66,21 @@ func NewService(cfg *config.Config) (*Service, error) {
 			log.Printf("警告: MySQL 连接 %s 失败，相关指标将无法采集: %v", connName, err)
 		} else {
 			svc.mysql[connName] = client
+		}
+	}
+
+	// 初始化 HTTP API 连接（失败时只记录警告，不阻止服务启动）
+	for connName := range httpAPIConnectionsNeeded(cfg) {
+		httpapiCfg, ok := cfg.HTTPAPIConfigFor(connName)
+		if !ok {
+			log.Printf("警告: 未找到 HTTP API 连接配置 %s，相关指标将无法采集", connName)
+			continue
+		}
+		client, err := datasource.NewHTTPAPIClient(httpapiCfg)
+		if err != nil {
+			log.Printf("警告: HTTP API 连接 %s 失败，相关指标将无法采集: %v", connName, err)
+		} else {
+			svc.httpapi[connName] = client
 		}
 	}
 
@@ -169,6 +186,21 @@ func mysqlConnectionsNeeded(cfg *config.Config) map[string]struct{} {
 	return required
 }
 
+func httpAPIConnectionsNeeded(cfg *config.Config) map[string]struct{} {
+	required := make(map[string]struct{})
+	for _, m := range cfg.Metrics {
+		if m.Source != "http_api" {
+			continue
+		}
+		name := m.Connection
+		if name == "" {
+			name = "default"
+		}
+		required[name] = struct{}{}
+	}
+	return required
+}
+
 // Run 启动周期性采集流程。
 func (s *Service) Run(ctx context.Context) {
 	interval, err := s.cfg.Schedule.IntervalDuration()
@@ -234,6 +266,29 @@ func (s *Service) queryMetric(ctx context.Context, spec config.MetricSpec) (floa
 		}
 		log.Printf("执行 IoTDB 查询: %s", spec.Query)
 		return s.iotdb.QueryScalar(ctx, spec.Query, spec.ResultField)
+	case "http_api":
+		conn := spec.Connection
+		if conn == "" {
+			conn = "default"
+		}
+		client, ok := s.httpapi[conn]
+		if !ok {
+			return 0, fmt.Errorf("HTTP API 连接 %s 未初始化", conn)
+		}
+		// 对于 HTTP API，Query 字段存储 URL（可选，如果为空则使用连接配置的 URL）
+		// ResultField 存储 JSON 路径
+		jsonPath := spec.ResultField
+		if jsonPath == "" {
+			return 0, fmt.Errorf("HTTP API 指标 %s 缺少 result_field（JSON 路径）", spec.Name)
+		}
+		// 使用 spec.Query 作为 URL（如果提供），否则使用连接配置的 URL
+		queryURL := spec.Query
+		if queryURL != "" {
+			log.Printf("执行 HTTP API 查询（连接=%s，URL=%s，JSON 路径=%s）", conn, queryURL, jsonPath)
+		} else {
+			log.Printf("执行 HTTP API 查询（连接=%s，使用连接配置 URL，JSON 路径=%s）", conn, jsonPath)
+		}
+		return client.QueryScalar(ctx, jsonPath, queryURL)
 	default:
 		return 0, ErrDataSourceUnavailable(spec.Source)
 	}
@@ -257,6 +312,13 @@ func (s *Service) Close() {
 	if s.iotdb != nil {
 		if err := s.iotdb.Close(); err != nil {
 			log.Printf("关闭 IoTDB 连接失败: %v", err)
+		}
+	}
+	if s.httpapi != nil {
+		for name, client := range s.httpapi {
+			if err := client.Close(); err != nil {
+				log.Printf("关闭 HTTP API 连接 %s 失败: %v", name, err)
+			}
 		}
 	}
 	// 注销指标
@@ -335,6 +397,37 @@ func (s *Service) ReloadConfig(newCfg *config.Config) ReloadResult {
 			if client, ok := s.mysql[name]; ok {
 				client.Close()
 				delete(s.mysql, name)
+			}
+		}
+	}
+
+	// 关闭不再需要的 HTTP API 连接
+	oldHTTPAPIConnections := make(map[string]bool)
+	for name := range s.httpapi {
+		oldHTTPAPIConnections[name] = true
+	}
+
+	newHTTPAPIConnections := httpAPIConnectionsNeeded(newCfg)
+	for name := range oldHTTPAPIConnections {
+		if _, needed := newHTTPAPIConnections[name]; !needed {
+			if client, ok := s.httpapi[name]; ok {
+				client.Close()
+				delete(s.httpapi, name)
+			}
+		}
+	}
+
+	// 添加新的 HTTP API 连接
+	for connName := range newHTTPAPIConnections {
+		if _, exists := s.httpapi[connName]; !exists {
+			httpapiCfg, ok := newCfg.HTTPAPIConfigFor(connName)
+			if ok {
+				client, err := datasource.NewHTTPAPIClient(httpapiCfg)
+				if err != nil {
+					log.Printf("警告: HTTP API 连接 %s 初始化失败: %v", connName, err)
+				} else {
+					s.httpapi[connName] = client
+				}
 			}
 		}
 	}

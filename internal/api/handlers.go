@@ -162,14 +162,56 @@ func (s *Server) handleTestIoTDB(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleTestHTTPAPI 测试 HTTP API 连接。
+func (s *Server) handleTestHTTPAPI(w http.ResponseWriter, r *http.Request) {
+	var httpapiCfg config.HTTPAPIConfig
+	if err := json.NewDecoder(r.Body).Decode(&httpapiCfg); err != nil {
+		s.writeError(w, http.StatusBadRequest, fmt.Sprintf("解析 HTTP API 配置失败: %v", err))
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	client, err := datasource.NewHTTPAPIClient(httpapiCfg)
+	if err != nil {
+		s.writeJSON(w, http.StatusOK, map[string]interface{}{
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
+	}
+	defer client.Close()
+
+	// 测试连接：尝试获取 JSON 根路径的值（如果响应是对象，会返回错误，但至少能验证连接）
+	_, err = client.QueryScalar(ctx, "")
+	if err != nil {
+		// 如果根路径失败，尝试一个常见的测试路径
+		_, err = client.QueryScalar(ctx, "status")
+		if err != nil {
+			s.writeJSON(w, http.StatusOK, map[string]interface{}{
+				"success": false,
+				"error":   fmt.Sprintf("HTTP API 连接测试失败: %v", err),
+			})
+			return
+		}
+	}
+
+	s.writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"message": "HTTP API 连接测试成功",
+	})
+}
+
 // QueryPreviewRequest 查询预览请求。
 type QueryPreviewRequest struct {
-	Source      string            `json:"source"`
-	Query       string            `json:"query"`
-	Connection  string            `json:"connection,omitempty"`
-	ResultField string            `json:"result_field,omitempty"`
-	MySQLConfig *config.MySQLConfig `json:"mysql_config,omitempty"`
-	IoTDBConfig *config.IoTDBConfig `json:"iotdb_config,omitempty"`
+	Source       string             `json:"source"`
+	Query        string             `json:"query"`
+	Connection   string             `json:"connection,omitempty"`
+	ResultField  string             `json:"result_field,omitempty"`
+	MySQLConfig  *config.MySQLConfig  `json:"mysql_config,omitempty"`
+	IoTDBConfig  *config.IoTDBConfig  `json:"iotdb_config,omitempty"`
+	HTTPAPIConfig *config.HTTPAPIConfig `json:"http_api_config,omitempty"`
 }
 
 // handlePreviewQuery 预览 SQL 查询结果。
@@ -238,6 +280,45 @@ func (s *Server) handlePreviewQuery(w http.ResponseWriter, r *http.Request) {
 			defer client.Close()
 		}
 		value, err = client.QueryScalar(ctx, req.Query, req.ResultField)
+	case "http_api":
+		var client *datasource.HTTPAPIClient
+		if req.HTTPAPIConfig != nil {
+			// 使用请求中的配置
+			client, err = datasource.NewHTTPAPIClient(*req.HTTPAPIConfig)
+			if err != nil {
+				s.writeError(w, http.StatusBadRequest, fmt.Sprintf("创建 HTTP API 客户端失败: %v", err))
+				return
+			}
+			defer client.Close()
+		} else {
+			// 使用已配置的连接
+			cfg := s.getConfig()
+			connName := req.Connection
+			if connName == "" {
+				connName = "default"
+			}
+			httpapiCfg, ok := cfg.HTTPAPIConfigFor(connName)
+			if !ok {
+				s.writeError(w, http.StatusBadRequest, fmt.Sprintf("HTTP API 连接 %s 未配置", connName))
+				return
+			}
+			client, err = datasource.NewHTTPAPIClient(httpapiCfg)
+			if err != nil {
+				s.writeError(w, http.StatusInternalServerError, fmt.Sprintf("创建 HTTP API 客户端失败: %v", err))
+				return
+			}
+			defer client.Close()
+		}
+		// 对于 HTTP API，ResultField 存储 JSON 路径
+		// Query 字段存储 URL（可选，如果为空则使用连接配置的 URL）
+		jsonPath := req.ResultField
+		if jsonPath == "" {
+			s.writeError(w, http.StatusBadRequest, "HTTP API 预览需要指定 result_field（JSON 路径）")
+			return
+		}
+		// 使用 req.Query 作为 URL（如果提供），否则使用连接配置的 URL
+		queryURL := req.Query
+		value, err = client.QueryScalar(ctx, jsonPath, queryURL)
 	default:
 		s.writeError(w, http.StatusBadRequest, fmt.Sprintf("不支持的数据源: %s", req.Source))
 		return
