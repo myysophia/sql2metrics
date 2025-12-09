@@ -517,7 +517,7 @@ func (s *Service) ReloadConfig(newCfg *config.Config) ReloadResult {
 					})
 				}
 
-				if err := svc.registry.Register(metric); err != nil {
+				if err := s.registry.Register(metric); err != nil {
 					return ReloadResult{
 						Success: false,
 						Error:   fmt.Sprintf("注册指标 %s 失败: %v", spec.Name, err),
@@ -573,7 +573,7 @@ func (s *Service) ReloadConfig(newCfg *config.Config) ReloadResult {
 				})
 			}
 
-			if err := svc.registry.Register(metric); err != nil {
+			if err := s.registry.Register(metric); err != nil {
 				return ReloadResult{
 					Success: false,
 					Error:   fmt.Sprintf("注册指标 %s 失败: %v", spec.Name, err),
