@@ -25,4 +25,7 @@ export default {
   plugins: [],
 }
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> 59c5b8e (feat: redis)

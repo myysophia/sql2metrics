@@ -61,6 +61,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.handleTestMySQL(w, r)
 	case path == "/api/datasource/test/iotdb" && r.Method == "POST":
 		s.handleTestIoTDB(w, r)
+	case path == "/api/datasource/test/redis" && r.Method == "POST":
+		s.handleTestRedis(w, r)
 	case path == "/api/datasource/query/preview" && r.Method == "POST":
 		s.handlePreviewQuery(w, r)
 	case path == "/api/metrics" && r.Method == "GET":
@@ -74,13 +76,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case strings.HasPrefix(path, "/api/metrics/") && r.Method == "DELETE":
 		s.handleDeleteMetric(w, r)
 	case path == "/metrics":
-		// 转发到 Prometheus handler
 		s.service.GetPrometheusHandler().ServeHTTP(w, r)
 	default:
 		http.NotFound(w, r)
 	}
 }
-
 
 func (s *Server) writeJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")

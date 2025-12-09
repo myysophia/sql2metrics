@@ -20,6 +20,7 @@ import (
 type Service struct {
 	cfg        *config.Config
 	mysql      map[string]*datasource.MySQLClient
+	redis      map[string]*datasource.RedisClient
 	iotdb      *datasource.IoTDBClient
 	metrics    []metricHolder
 	errorCount prometheus.Counter
@@ -39,9 +40,10 @@ func NewService(cfg *config.Config) (*Service, error) {
 	svc := &Service{
 		cfg:      cfg,
 		mysql:    make(map[string]*datasource.MySQLClient),
+		redis:    make(map[string]*datasource.RedisClient),
 		registry: prometheus.NewRegistry(),
 	}
-	
+
 	// 初始化 IoTDB 连接（失败时只记录警告，不阻止服务启动）
 	if needsSource(cfg.Metrics, "iotdb") {
 		iotdbClient, err := datasource.NewIoTDBClient(cfg.IoTDB)
@@ -64,6 +66,21 @@ func NewService(cfg *config.Config) (*Service, error) {
 			log.Printf("警告: MySQL 连接 %s 失败，相关指标将无法采集: %v", connName, err)
 		} else {
 			svc.mysql[connName] = client
+		}
+	}
+
+	// 初始化 Redis 连接（失败时只记录警告，不阻止服务启动）
+	for connName := range redisConnectionsNeeded(cfg) {
+		redisCfg, ok := cfg.RedisConfigFor(connName)
+		if !ok {
+			log.Printf("警告: 未找到 Redis 连接配置 %s，相关指标将无法采集", connName)
+			continue
+		}
+		client, err := datasource.NewRedisClient(redisCfg)
+		if err != nil {
+			log.Printf("警告: Redis 连接 %s 失败，相关指标将无法采集: %v", connName, err)
+		} else {
+			svc.redis[connName] = client
 		}
 	}
 
@@ -117,7 +134,6 @@ func NewService(cfg *config.Config) (*Service, error) {
 			return nil, fmt.Errorf("注册指标 %s 失败: %w", spec.Name, err)
 		}
 
-		// 目前只支持 Gauge 类型的更新，其他类型需要不同的更新逻辑
 		if gauge, ok := metric.(prometheus.Gauge); ok {
 			svc.metrics = append(svc.metrics, metricHolder{
 				spec:  spec,
@@ -135,13 +151,13 @@ func NewService(cfg *config.Config) (*Service, error) {
 		Help: "最近一次成功采集的 Unix 时间戳",
 	})
 	svc.registry.MustRegister(svc.errorCount, svc.lastRun)
-	
+
 	// 同时注册到默认注册表以保持兼容性
 	prometheus.MustRegister(svc.errorCount, svc.lastRun)
 	for _, holder := range svc.metrics {
 		prometheus.MustRegister(holder.gauge)
 	}
-	
+
 	return svc, nil
 }
 
@@ -158,6 +174,21 @@ func mysqlConnectionsNeeded(cfg *config.Config) map[string]struct{} {
 	required := make(map[string]struct{})
 	for _, m := range cfg.Metrics {
 		if m.Source != "mysql" {
+			continue
+		}
+		name := m.Connection
+		if name == "" {
+			name = "default"
+		}
+		required[name] = struct{}{}
+	}
+	return required
+}
+
+func redisConnectionsNeeded(cfg *config.Config) map[string]struct{} {
+	required := make(map[string]struct{})
+	for _, m := range cfg.Metrics {
+		if m.Source != "redis" {
 			continue
 		}
 		name := m.Connection
@@ -234,6 +265,17 @@ func (s *Service) queryMetric(ctx context.Context, spec config.MetricSpec) (floa
 		}
 		log.Printf("执行 IoTDB 查询: %s", spec.Query)
 		return s.iotdb.QueryScalar(ctx, spec.Query, spec.ResultField)
+	case "redis":
+		conn := spec.Connection
+		if conn == "" {
+			conn = "default"
+		}
+		client, ok := s.redis[conn]
+		if !ok {
+			return 0, fmt.Errorf("Redis 连接 %s 未初始化", conn)
+		}
+		log.Printf("执行 Redis 命令（连接=%s）: %s", conn, spec.Query)
+		return client.QueryScalar(ctx, spec.Query)
 	default:
 		return 0, ErrDataSourceUnavailable(spec.Source)
 	}
@@ -254,12 +296,18 @@ func (s *Service) Close() {
 			}
 		}
 	}
+	if s.redis != nil {
+		for name, client := range s.redis {
+			if err := client.Close(); err != nil {
+				log.Printf("关闭 Redis 连接 %s 失败: %v", name, err)
+			}
+		}
+	}
 	if s.iotdb != nil {
 		if err := s.iotdb.Close(); err != nil {
 			log.Printf("关闭 IoTDB 连接失败: %v", err)
 		}
 	}
-	// 注销指标
 	if s.registry != nil {
 		for _, holder := range s.metrics {
 			s.registry.Unregister(holder.gauge)
@@ -284,11 +332,11 @@ func (s *Service) GetPrometheusHandler() http.Handler {
 
 // ReloadResult 热更新结果。
 type ReloadResult struct {
-	Success   bool     `json:"success"`
-	Error     string   `json:"error,omitempty"`
-	Message   string   `json:"message"`
-	Metrics   []string `json:"metrics,omitempty"`
-	Removed   []string `json:"removed,omitempty"`
+	Success bool     `json:"success"`
+	Error   string   `json:"error,omitempty"`
+	Message string   `json:"message"`
+	Metrics []string `json:"metrics,omitempty"`
+	Removed []string `json:"removed,omitempty"`
 }
 
 // ReloadConfig 重新加载配置（热更新）。
@@ -296,7 +344,6 @@ func (s *Service) ReloadConfig(newCfg *config.Config) ReloadResult {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// 收集需要移除的指标名称
 	oldMetricNames := make(map[string]bool)
 	for _, holder := range s.metrics {
 		oldMetricNames[holder.spec.Name] = true
@@ -307,7 +354,6 @@ func (s *Service) ReloadConfig(newCfg *config.Config) ReloadResult {
 		newMetricNames[spec.Name] = true
 	}
 
-	// 找出需要移除的指标
 	var removed []string
 	for name := range oldMetricNames {
 		if !newMetricNames[name] {
@@ -315,7 +361,6 @@ func (s *Service) ReloadConfig(newCfg *config.Config) ReloadResult {
 		}
 	}
 
-	// 注销旧指标
 	for _, holder := range s.metrics {
 		if !newMetricNames[holder.spec.Name] {
 			s.registry.Unregister(holder.gauge)
@@ -323,13 +368,18 @@ func (s *Service) ReloadConfig(newCfg *config.Config) ReloadResult {
 		}
 	}
 
-	// 关闭不再需要的数据源连接
 	oldMySQLConnections := make(map[string]bool)
 	for name := range s.mysql {
 		oldMySQLConnections[name] = true
 	}
+	oldRedisConnections := make(map[string]bool)
+	for name := range s.redis {
+		oldRedisConnections[name] = true
+	}
 
 	newMySQLConnections := mysqlConnectionsNeeded(newCfg)
+	newRedisConnections := redisConnectionsNeeded(newCfg)
+
 	for name := range oldMySQLConnections {
 		if _, needed := newMySQLConnections[name]; !needed {
 			if client, ok := s.mysql[name]; ok {
@@ -338,8 +388,15 @@ func (s *Service) ReloadConfig(newCfg *config.Config) ReloadResult {
 			}
 		}
 	}
+	for name := range oldRedisConnections {
+		if _, needed := newRedisConnections[name]; !needed {
+			if client, ok := s.redis[name]; ok {
+				client.Close()
+				delete(s.redis, name)
+			}
+		}
+	}
 
-	// 检查是否需要 IoTDB
 	needsIoTDB := needsSource(newCfg.Metrics, "iotdb")
 	if !needsIoTDB && s.iotdb != nil {
 		s.iotdb.Close()
@@ -356,7 +413,6 @@ func (s *Service) ReloadConfig(newCfg *config.Config) ReloadResult {
 		}
 	}
 
-	// 创建新的 MySQL 连接（如果需要）
 	for connName := range newMySQLConnections {
 		if _, exists := s.mysql[connName]; !exists {
 			mysqlCfg, ok := newCfg.MySQLConfigFor(connName)
@@ -379,7 +435,28 @@ func (s *Service) ReloadConfig(newCfg *config.Config) ReloadResult {
 		}
 	}
 
-	// 注册新指标或更新现有指标
+	for connName := range newRedisConnections {
+		if _, exists := s.redis[connName]; !exists {
+			redisCfg, ok := newCfg.RedisConfigFor(connName)
+			if !ok {
+				return ReloadResult{
+					Success: false,
+					Error:   fmt.Sprintf("未找到 Redis 连接 %s", connName),
+					Message: "热更新失败",
+				}
+			}
+			client, err := datasource.NewRedisClient(redisCfg)
+			if err != nil {
+				return ReloadResult{
+					Success: false,
+					Error:   fmt.Sprintf("初始化 Redis 连接 %s 失败: %v", connName, err),
+					Message: "热更新失败",
+				}
+			}
+			s.redis[connName] = client
+		}
+	}
+
 	var newMetrics []string
 	var updatedMetrics []metricHolder
 
@@ -389,7 +466,6 @@ func (s *Service) ReloadConfig(newCfg *config.Config) ReloadResult {
 			metricType = "gauge"
 		}
 
-		// 检查是否已存在
 		var existingHolder *metricHolder
 		for i, holder := range s.metrics {
 			if holder.spec.Name == spec.Name {
@@ -399,13 +475,10 @@ func (s *Service) ReloadConfig(newCfg *config.Config) ReloadResult {
 		}
 
 		if existingHolder != nil {
-			// 更新现有指标（如果类型或标签改变，需要重新注册）
 			if existingHolder.spec.Type != spec.Type || !labelsEqual(existingHolder.spec.Labels, spec.Labels) {
-				// 注销旧指标
 				s.registry.Unregister(existingHolder.gauge)
 				prometheus.Unregister(existingHolder.gauge)
 
-				// 创建新指标
 				var metric prometheus.Collector
 				switch metricType {
 				case "gauge":
@@ -444,7 +517,7 @@ func (s *Service) ReloadConfig(newCfg *config.Config) ReloadResult {
 					})
 				}
 
-				if err := s.registry.Register(metric); err != nil {
+				if err := svc.registry.Register(metric); err != nil {
 					return ReloadResult{
 						Success: false,
 						Error:   fmt.Sprintf("注册指标 %s 失败: %v", spec.Name, err),
@@ -458,12 +531,10 @@ func (s *Service) ReloadConfig(newCfg *config.Config) ReloadResult {
 					prometheus.MustRegister(gauge)
 				}
 			} else {
-				// 只更新 spec
 				existingHolder.spec = spec
 			}
 			updatedMetrics = append(updatedMetrics, *existingHolder)
 		} else {
-			// 创建新指标
 			var metric prometheus.Collector
 			switch metricType {
 			case "gauge":
@@ -502,7 +573,7 @@ func (s *Service) ReloadConfig(newCfg *config.Config) ReloadResult {
 				})
 			}
 
-			if err := s.registry.Register(metric); err != nil {
+			if err := svc.registry.Register(metric); err != nil {
 				return ReloadResult{
 					Success: false,
 					Error:   fmt.Sprintf("注册指标 %s 失败: %v", spec.Name, err),
@@ -522,7 +593,6 @@ func (s *Service) ReloadConfig(newCfg *config.Config) ReloadResult {
 		}
 	}
 
-	// 更新 metrics 列表
 	s.metrics = updatedMetrics
 	s.cfg = newCfg
 

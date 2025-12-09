@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 import type { Config, MetricSpec, MySQLConfig, IoTDBConfig, ReloadResult } from '../types/config'
+=======
+import type { Config, MetricSpec, MySQLConfig, IoTDBConfig, RedisConfig, ReloadResult } from '../types/config'
+>>>>>>> 59c5b8e (feat: redis)
 
 const API_BASE = '/api'
 
@@ -42,6 +46,7 @@ export const api = {
       body: JSON.stringify(config),
     }),
   
+<<<<<<< HEAD
   testIoTDB: (config: IoTDBConfig) =>
     request<{ success: boolean; error?: string; message?: string }>('/datasource/test/iotdb', {
       method: 'POST',
@@ -56,6 +61,29 @@ export const api = {
     mysql_config?: MySQLConfig
     iotdb_config?: IoTDBConfig
   }) =>
+=======
+  testIoTDB: (config: IoTDBConfig) =>
+    request<{ success: boolean; error?: string; message?: string }>('/datasource/test/iotdb', {
+      method: 'POST',
+      body: JSON.stringify(config),
+    }),
+  
+  testRedis: (config: RedisConfig) =>
+    request<{ success: boolean; error?: string; message?: string }>('/datasource/test/redis', {
+      method: 'POST',
+      body: JSON.stringify(config),
+    }),
+  
+  previewQuery: (params: {
+    source: 'mysql' | 'iotdb' | 'redis'
+    query: string
+    connection?: string
+    result_field?: string
+    mysql_config?: MySQLConfig
+    iotdb_config?: IoTDBConfig
+    redis_config?: RedisConfig
+  }) =>
+>>>>>>> 59c5b8e (feat: redis)
     request<{ success: boolean; value?: number; error?: string }>('/datasource/query/preview', {
       method: 'POST',
       body: JSON.stringify(params),
@@ -84,4 +112,7 @@ export const api = {
     }),
 }
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> 59c5b8e (feat: redis)

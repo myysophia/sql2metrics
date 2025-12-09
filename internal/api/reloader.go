@@ -64,4 +64,3 @@ func (r *Reloader) GetService() *collectors.Service {
 	defer r.mu.RUnlock()
 	return r.service
 }
-

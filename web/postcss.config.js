@@ -5,4 +5,7 @@ export default {
   },
 }
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> 59c5b8e (feat: redis)

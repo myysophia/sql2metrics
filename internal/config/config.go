@@ -17,6 +17,8 @@ type Config struct {
 	Prometheus       PrometheusConfig       `yaml:"prometheus" json:"prometheus"`
 	MySQL            MySQLConfig            `yaml:"mysql" json:"mysql"`
 	MySQLConnections map[string]MySQLConfig `yaml:"mysql_connections" json:"mysql_connections"`
+	Redis            RedisConfig            `yaml:"redis" json:"redis"`
+	RedisConnections map[string]RedisConfig `yaml:"redis_connections" json:"redis_connections"`
 	IoTDB            IoTDBConfig            `yaml:"iotdb" json:"iotdb"`
 	Metrics          []MetricSpec           `yaml:"metrics" json:"metrics"`
 }
@@ -42,6 +44,17 @@ type MySQLConfig struct {
 	Params   map[string]string `yaml:"params" json:"params,omitempty"`
 }
 
+// RedisConfig 填写 Redis 连接信息。
+type RedisConfig struct {
+	Mode          string `yaml:"mode" json:"mode"` // standalone/sentinel/cluster，当前仅支持 standalone
+	Addr          string `yaml:"addr" json:"addr"` // host:port
+	Username      string `yaml:"username" json:"username,omitempty"`
+	Password      string `yaml:"password" json:"password,omitempty"`
+	DB            int    `yaml:"db" json:"db,omitempty"`
+	EnableTLS     bool   `yaml:"enable_tls" json:"enable_tls,omitempty"`
+	SkipTLSVerify bool   `yaml:"skip_tls_verify" json:"skip_tls_verify,omitempty"`
+}
+
 // IoTDBConfig 填写 IoTDB Session 连接信息。
 type IoTDBConfig struct {
 	Host        string `yaml:"host" json:"host"`
@@ -57,23 +70,22 @@ type IoTDBConfig struct {
 
 // MetricSpec 定义单个指标查询的元数据。
 type MetricSpec struct {
-	Name        string            `yaml:"name" json:"name"`
-	Help        string            `yaml:"help" json:"help"`
-	Type        string            `yaml:"type" json:"type"` // gauge/counter/histogram/summary，默认为 gauge
-	Source      string            `yaml:"source" json:"source"`
-	Query       string            `yaml:"query" json:"query"`
-	Labels      map[string]string `yaml:"labels" json:"labels,omitempty"`
-	ResultField string            `yaml:"result_field" json:"result_field,omitempty"`
-	Connection  string            `yaml:"connection" json:"connection,omitempty"`
-	// Histogram/Summary 特定配置
-	Buckets    []float64         `yaml:"buckets,omitempty" json:"buckets,omitempty"`     // Histogram 分桶
-	Objectives map[float64]float64 `yaml:"objectives,omitempty" json:"-"`                 // Summary 分位数目标（JSON 序列化通过 ObjectivesJSON）
+	Name        string              `yaml:"name" json:"name"`
+	Help        string              `yaml:"help" json:"help"`
+	Type        string              `yaml:"type" json:"type"` // gauge/counter/histogram/summary，默认为 gauge
+	Source      string              `yaml:"source" json:"source"`
+	Query       string              `yaml:"query" json:"query"`
+	Labels      map[string]string   `yaml:"labels" json:"labels,omitempty"`
+	ResultField string              `yaml:"result_field" json:"result_field,omitempty"`
+	Connection  string              `yaml:"connection" json:"connection,omitempty"`
+	Buckets     []float64           `yaml:"buckets,omitempty" json:"buckets,omitempty"` // Histogram 分桶
+	Objectives  map[float64]float64 `yaml:"objectives,omitempty" json:"-"`              // Summary 分位数目标（JSON 序列化通过 ObjectivesJSON）
 }
 
-// ObjectivesJSON 用于 JSON 序列化的 objectives（使用字符串 key）
+// ObjectivesJSON 用于 JSON 序列化的 objectives（使用字符串 key）。
 type ObjectivesJSON map[string]float64
 
-// MarshalJSON 实现自定义 JSON 序列化
+// MarshalJSON 实现自定义 JSON 序列化。
 func (m MetricSpec) MarshalJSON() ([]byte, error) {
 	type Alias MetricSpec
 	aux := &struct {
@@ -82,19 +94,18 @@ func (m MetricSpec) MarshalJSON() ([]byte, error) {
 	}{
 		Alias: (*Alias)(&m),
 	}
-	
-	// 转换 objectives 为字符串 key
+
 	if m.Objectives != nil && len(m.Objectives) > 0 {
 		aux.Objectives = make(ObjectivesJSON)
 		for k, v := range m.Objectives {
 			aux.Objectives[fmt.Sprintf("%g", k)] = v
 		}
 	}
-	
+
 	return json.Marshal(aux)
 }
 
-// UnmarshalJSON 实现自定义 JSON 反序列化
+// UnmarshalJSON 实现自定义 JSON 反序列化。
 func (m *MetricSpec) UnmarshalJSON(data []byte) error {
 	type Alias MetricSpec
 	aux := &struct {
@@ -103,12 +114,11 @@ func (m *MetricSpec) UnmarshalJSON(data []byte) error {
 	}{
 		Alias: (*Alias)(m),
 	}
-	
+
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return err
 	}
-	
-	// 转换 objectives 回 float64 key
+
 	if aux.Objectives != nil && len(aux.Objectives) > 0 {
 		m.Objectives = make(map[float64]float64)
 		for k, v := range aux.Objectives {
@@ -119,7 +129,7 @@ func (m *MetricSpec) UnmarshalJSON(data []byte) error {
 			m.Objectives[key] = v
 		}
 	}
-	
+
 	return nil
 }
 
@@ -207,17 +217,31 @@ func (c *Config) Validate() error {
 	if c.MySQLConnections == nil {
 		c.MySQLConnections = make(map[string]MySQLConfig)
 	}
+	if c.RedisConnections == nil {
+		c.RedisConnections = make(map[string]RedisConfig)
+	}
+	for name, rc := range c.RedisConnections {
+		if rc.Addr == "" {
+			return fmt.Errorf("Redis 连接 %s 缺少 addr", name)
+		}
+		mode := rc.Mode
+		if mode == "" {
+			mode = "standalone"
+		}
+		if mode != "standalone" {
+			return fmt.Errorf("Redis 连接 %s 使用的模式暂未支持: %s", name, mode)
+		}
+	}
 	for _, m := range c.Metrics {
 		if m.Name == "" {
 			return errors.New("指标名称不能为空")
 		}
-		if m.Source != "mysql" && m.Source != "iotdb" {
+		if m.Source != "mysql" && m.Source != "iotdb" && m.Source != "redis" {
 			return fmt.Errorf("指标 %s 的 source 非法: %s", m.Name, m.Source)
 		}
 		if m.Query == "" {
 			return fmt.Errorf("指标 %s 缺少查询语句", m.Name)
 		}
-		// 验证指标类型
 		metricType := m.Type
 		if metricType == "" {
 			metricType = "gauge"
@@ -225,11 +249,9 @@ func (c *Config) Validate() error {
 		if metricType != "gauge" && metricType != "counter" && metricType != "histogram" && metricType != "summary" {
 			return fmt.Errorf("指标 %s 的类型非法: %s，支持的类型: gauge, counter, histogram, summary", m.Name, metricType)
 		}
-		// Histogram 需要 buckets
 		if metricType == "histogram" && len(m.Buckets) == 0 {
 			return fmt.Errorf("指标 %s 类型为 histogram，但未配置 buckets", m.Name)
 		}
-		// Summary 需要 objectives
 		if metricType == "summary" && len(m.Objectives) == 0 {
 			return fmt.Errorf("指标 %s 类型为 summary，但未配置 objectives", m.Name)
 		}
@@ -240,6 +262,15 @@ func (c *Config) Validate() error {
 			}
 			if _, ok := c.MySQLConnections[conn]; !ok {
 				return fmt.Errorf("指标 %s 引用的 MySQL 连接 %s 未配置", m.Name, conn)
+			}
+		}
+		if m.Source == "redis" {
+			conn := m.Connection
+			if conn == "" {
+				conn = "default"
+			}
+			if _, ok := c.RedisConnections[conn]; !ok {
+				return fmt.Errorf("指标 %s 引用的 Redis 连接 %s 未配置", m.Name, conn)
 			}
 		}
 	}
@@ -257,10 +288,24 @@ func (c *Config) ApplyDefaults() error {
 	if c.MySQLConnections == nil {
 		c.MySQLConnections = make(map[string]MySQLConfig)
 	}
+	if c.RedisConnections == nil {
+		c.RedisConnections = make(map[string]RedisConfig)
+	}
 	if _, ok := c.MySQLConnections["default"]; !ok {
 		if c.MySQL.Host != "" || c.MySQL.User != "" || c.MySQL.Database != "" {
 			c.MySQLConnections["default"] = c.MySQL
 		}
+	}
+	if _, ok := c.RedisConnections["default"]; !ok {
+		if c.Redis.Addr != "" {
+			c.RedisConnections["default"] = c.Redis
+		}
+	}
+	for name, rc := range c.RedisConnections {
+		if rc.Mode == "" {
+			rc.Mode = "standalone"
+		}
+		c.RedisConnections[name] = rc
 	}
 	if c.IoTDB.FetchSize == 0 {
 		c.IoTDB.FetchSize = 1024
@@ -268,7 +313,6 @@ func (c *Config) ApplyDefaults() error {
 	if c.IoTDB.ZoneID == "" {
 		c.IoTDB.ZoneID = "UTC+08:00"
 	}
-	// 为指标设置默认类型
 	for i := range c.Metrics {
 		if c.Metrics[i].Type == "" {
 			c.Metrics[i].Type = "gauge"
@@ -286,6 +330,18 @@ func (c *Config) MySQLConfigFor(name string) (MySQLConfig, bool) {
 		return MySQLConfig{}, false
 	}
 	conf, ok := c.MySQLConnections[name]
+	return conf, ok
+}
+
+// RedisConfigFor 返回指定名称的 Redis 配置，默认为 default。
+func (c *Config) RedisConfigFor(name string) (RedisConfig, bool) {
+	if name == "" {
+		name = "default"
+	}
+	if c.RedisConnections == nil {
+		return RedisConfig{}, false
+	}
+	conf, ok := c.RedisConnections[name]
 	return conf, ok
 }
 

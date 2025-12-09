@@ -26,25 +26,20 @@ func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 应用默认值
 	if err := newCfg.ApplyDefaults(); err != nil {
 		s.writeError(w, http.StatusBadRequest, fmt.Sprintf("应用默认值失败: %v", err))
 		return
 	}
-
-	// 验证配置
 	if err := newCfg.Validate(); err != nil {
 		s.writeError(w, http.StatusBadRequest, fmt.Sprintf("配置验证失败: %v", err))
 		return
 	}
 
-	// 保存到文件
 	if err := newCfg.Save(s.configPath); err != nil {
 		s.writeError(w, http.StatusInternalServerError, fmt.Sprintf("保存配置失败: %v", err))
 		return
 	}
 
-	// 触发热更新
 	reloadResult := s.service.ReloadConfig(&newCfg)
 	if !reloadResult.Success {
 		s.writeError(w, http.StatusInternalServerError, fmt.Sprintf("热更新失败: %s", reloadResult.Error))
@@ -146,9 +141,7 @@ func (s *Server) handleTestIoTDB(w http.ResponseWriter, r *http.Request) {
 	}
 	defer client.Close()
 
-	// 使用 show databases 来测试连接
-	err = client.TestConnection(ctx)
-	if err != nil {
+	if err := client.TestConnection(ctx); err != nil {
 		s.writeJSON(w, http.StatusOK, map[string]interface{}{
 			"success": false,
 			"error":   fmt.Sprintf("IoTDB 连接测试失败: %v", err),
@@ -162,14 +155,50 @@ func (s *Server) handleTestIoTDB(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleTestRedis 测试 Redis 连接。
+func (s *Server) handleTestRedis(w http.ResponseWriter, r *http.Request) {
+	var redisCfg config.RedisConfig
+	if err := json.NewDecoder(r.Body).Decode(&redisCfg); err != nil {
+		s.writeError(w, http.StatusBadRequest, fmt.Sprintf("解析 Redis 配置失败: %v", err))
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	client, err := datasource.NewRedisClient(redisCfg)
+	if err != nil {
+		s.writeJSON(w, http.StatusOK, map[string]interface{}{
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
+	}
+	defer client.Close()
+
+	if err := client.Ping(ctx); err != nil {
+		s.writeJSON(w, http.StatusOK, map[string]interface{}{
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	s.writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"message": "Redis 连接测试成功",
+	})
+}
+
 // QueryPreviewRequest 查询预览请求。
 type QueryPreviewRequest struct {
-	Source      string            `json:"source"`
-	Query       string            `json:"query"`
-	Connection  string            `json:"connection,omitempty"`
-	ResultField string            `json:"result_field,omitempty"`
+	Source      string              `json:"source"`
+	Query       string              `json:"query"`
+	Connection  string              `json:"connection,omitempty"`
+	ResultField string              `json:"result_field,omitempty"`
 	MySQLConfig *config.MySQLConfig `json:"mysql_config,omitempty"`
 	IoTDBConfig *config.IoTDBConfig `json:"iotdb_config,omitempty"`
+	RedisConfig *config.RedisConfig `json:"redis_config,omitempty"`
 }
 
 // handlePreviewQuery 预览 SQL 查询结果。
@@ -190,7 +219,6 @@ func (s *Server) handlePreviewQuery(w http.ResponseWriter, r *http.Request) {
 	case "mysql":
 		var client *datasource.MySQLClient
 		if req.MySQLConfig != nil {
-			// 使用请求中的配置
 			client, err = datasource.NewMySQLClient(*req.MySQLConfig)
 			if err != nil {
 				s.writeError(w, http.StatusBadRequest, fmt.Sprintf("创建 MySQL 客户端失败: %v", err))
@@ -198,7 +226,6 @@ func (s *Server) handlePreviewQuery(w http.ResponseWriter, r *http.Request) {
 			}
 			defer client.Close()
 		} else {
-			// 使用已配置的连接
 			cfg := s.getConfig()
 			connName := req.Connection
 			if connName == "" {
@@ -220,7 +247,6 @@ func (s *Server) handlePreviewQuery(w http.ResponseWriter, r *http.Request) {
 	case "iotdb":
 		var client *datasource.IoTDBClient
 		if req.IoTDBConfig != nil {
-			// 使用请求中的配置
 			client, err = datasource.NewIoTDBClient(*req.IoTDBConfig)
 			if err != nil {
 				s.writeError(w, http.StatusBadRequest, fmt.Sprintf("创建 IoTDB 客户端失败: %v", err))
@@ -228,7 +254,6 @@ func (s *Server) handlePreviewQuery(w http.ResponseWriter, r *http.Request) {
 			}
 			defer client.Close()
 		} else {
-			// 使用已配置的连接
 			cfg := s.getConfig()
 			client, err = datasource.NewIoTDBClient(cfg.IoTDB)
 			if err != nil {
@@ -238,6 +263,34 @@ func (s *Server) handlePreviewQuery(w http.ResponseWriter, r *http.Request) {
 			defer client.Close()
 		}
 		value, err = client.QueryScalar(ctx, req.Query, req.ResultField)
+	case "redis":
+		var client *datasource.RedisClient
+		if req.RedisConfig != nil {
+			client, err = datasource.NewRedisClient(*req.RedisConfig)
+			if err != nil {
+				s.writeError(w, http.StatusBadRequest, fmt.Sprintf("创建 Redis 客户端失败: %v", err))
+				return
+			}
+			defer client.Close()
+		} else {
+			cfg := s.getConfig()
+			connName := req.Connection
+			if connName == "" {
+				connName = "default"
+			}
+			redisCfg, ok := cfg.RedisConfigFor(connName)
+			if !ok {
+				s.writeError(w, http.StatusBadRequest, fmt.Sprintf("Redis 连接 %s 未配置", connName))
+				return
+			}
+			client, err = datasource.NewRedisClient(redisCfg)
+			if err != nil {
+				s.writeError(w, http.StatusInternalServerError, fmt.Sprintf("创建 Redis 客户端失败: %v", err))
+				return
+			}
+			defer client.Close()
+		}
+		value, err = client.QueryScalar(ctx, req.Query)
 	default:
 		s.writeError(w, http.StatusBadRequest, fmt.Sprintf("不支持的数据源: %s", req.Source))
 		return
@@ -286,7 +339,6 @@ func (s *Server) handleCreateMetric(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cfg := s.getConfig()
-	// 检查是否已存在
 	for _, m := range cfg.Metrics {
 		if m.Name == metric.Name {
 			s.writeError(w, http.StatusConflict, "指标已存在")

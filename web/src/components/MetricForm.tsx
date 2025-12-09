@@ -19,6 +19,7 @@ export default function MetricForm({ metric: initialMetric, config, onSave, onCa
   const queryClient = useQueryClient()
 
   const previewMutation = useMutation({
+<<<<<<< HEAD
     mutationFn: () =>
       api.previewQuery({
         source: metric.source,
@@ -26,6 +27,15 @@ export default function MetricForm({ metric: initialMetric, config, onSave, onCa
         connection: metric.connection,
         result_field: metric.result_field,
       }),
+=======
+    mutationFn: () =>
+      api.previewQuery({
+        source: metric.source,
+        query: metric.query,
+        connection: metric.connection,
+        result_field: metric.result_field,
+      }),
+>>>>>>> 59c5b8e (feat: redis)
     onMutate: () => {
       setPreviewing(true)
       setPreviewResult(null)
@@ -59,7 +69,12 @@ export default function MetricForm({ metric: initialMetric, config, onSave, onCa
     saveMutation.mutate()
   }
 
+<<<<<<< HEAD
   const mysqlConnections = Object.keys(config.mysql_connections || {})
+=======
+  const mysqlConnections = Object.keys(config.mysql_connections || {})
+  const redisConnections = Object.keys(config.redis_connections || {})
+>>>>>>> 59c5b8e (feat: redis)
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
@@ -118,6 +133,7 @@ export default function MetricForm({ metric: initialMetric, config, onSave, onCa
           </label>
           <select
             value={metric.source}
+<<<<<<< HEAD
             onChange={(e) => setMetric({ ...metric, source: e.target.value as 'mysql' | 'iotdb' })}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus-visible-ring"
           >
@@ -127,6 +143,18 @@ export default function MetricForm({ metric: initialMetric, config, onSave, onCa
         </div>
 
         {metric.source === 'mysql' && mysqlConnections.length > 0 && (
+=======
+            onChange={(e) => setMetric({ ...metric, source: e.target.value as MetricSpec['source'] })}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus-visible-ring"
+          >
+            <option value="mysql">MySQL</option>
+            <option value="iotdb">IoTDB</option>
+            <option value="redis">Redis</option>
+          </select>
+        </div>
+
+        {metric.source === 'mysql' && mysqlConnections.length > 0 && (
+>>>>>>> 59c5b8e (feat: redis)
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">连接</label>
             <select
@@ -135,6 +163,35 @@ export default function MetricForm({ metric: initialMetric, config, onSave, onCa
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus-visible-ring"
             >
               {mysqlConnections.map((conn) => (
+                <option key={conn} value={conn}>
+                  {conn}
+                </option>
+<<<<<<< HEAD
+              ))}
+            </select>
+          </div>
+        )}
+
+        {metric.source === 'iotdb' && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">结果字段</label>
+            <input
+              type="text"
+=======
+              ))}
+            </select>
+          </div>
+        )}
+
+        {metric.source === 'redis' && redisConnections.length > 0 && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">连接</label>
+            <select
+              value={metric.connection || 'default'}
+              onChange={(e) => setMetric({ ...metric, connection: e.target.value || undefined })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus-visible-ring"
+            >
+              {redisConnections.map((conn) => (
                 <option key={conn} value={conn}>
                   {conn}
                 </option>
@@ -148,6 +205,7 @@ export default function MetricForm({ metric: initialMetric, config, onSave, onCa
             <label className="block text-sm font-medium text-gray-700 mb-1">结果字段</label>
             <input
               type="text"
+>>>>>>> 59c5b8e (feat: redis)
               value={metric.result_field || ''}
               onChange={(e) => setMetric({ ...metric, result_field: e.target.value || undefined })}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus-visible-ring"
@@ -160,8 +218,13 @@ export default function MetricForm({ metric: initialMetric, config, onSave, onCa
       <div>
         <div className="flex justify-between items-center mb-2">
           <label className="block text-sm font-medium text-gray-700">
+<<<<<<< HEAD
             SQL 查询 <span className="text-red-500">*</span>
           </label>
+=======
+            查询/命令 <span className="text-red-500">*</span>
+          </label>
+>>>>>>> 59c5b8e (feat: redis)
           <button
             type="button"
             onClick={() => previewMutation.mutate()}
@@ -323,4 +386,7 @@ export default function MetricForm({ metric: initialMetric, config, onSave, onCa
   )
 }
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> 59c5b8e (feat: redis)

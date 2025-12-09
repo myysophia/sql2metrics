@@ -1,7 +1,7 @@
 # sql2metrics
 
 ## 项目简介
-sql2metrics 是一个以配置驱动的 Prometheus 指标采集器，能够定时执行数据库查询（当前支持 MySQL 与 IoTDB），并将结果转换为 Prometheus Metrics 暴露在 `/metrics` 端点。适用于快速将现有业务 SQL 转换为可监控的时间序列，用于观察趋势、告警与容量分析。
+	sql2metrics 是一个以配置驱动的 Prometheus 指标采集器，能够定时执行数据库查询（当前支持 MySQL、Redis 与 IoTDB），并将结果转换为 Prometheus Metrics 暴露在 `/metrics` 端点。适用于快速将现有业务 SQL 转换为可监控的时间序列，用于观察趋势、告警与容量分析。
 
 <img width="1305" height="623" alt="image" src="https://github.com/user-attachments/assets/02b7fdac-62c2-443b-9bbf-97f4f328aa04" />
 
@@ -26,7 +26,7 @@ sql2metrics 是一个以配置驱动的 Prometheus 指标采集器，能够定�
 
 ## 核心特性
 - **配置驱动**：全部指标、SQL、连接信息通过 YAML 描述，新增监控无需改动代码。
-- **多数据源支持**：同一进程内可连接多个 MySQL 数据库及 IoTDB，按指标选择数据源。
+- **多数据源支持**：同一进程内可连接多个 MySQL 数据库、Redis 与 IoTDB，按指标选择数据源。
 - **Prometheus 兼容**：内置 HTTP Server 暴露指标，同时提供采集状态指标便于自监控。
 - **Web UI 管理界面**：提供现代化的 Web 界面，支持可视化配置数据源和指标，一键保存并应用配置。
 - **配置热更新**：支持动态重新加载配置和指标，无需重启服务。
@@ -76,6 +76,7 @@ sql2metrics 是一个以配置驱动的 Prometheus 指标采集器，能够定�
 ## 配置结构说明
 - `schedule.interval`：采集周期，支持 `1h`、`30m` 等 Go duration 格式。
 - `mysql_connections`：声明多个 MySQL 连接（可共用实例不同库），指标通过 `connection` 字段选择。
+- `redis_connections`：声明多个 Redis 只读连接（目前支持 standalone），指标通过 `connection` 字段选择。
 - `iotdb`：配置 IoTDB 连接信息与会话参数；`result_field` 指定解析字段，若留空则自动选择首列。
 - `metrics`：描述每个指标的名称、帮助信息、查询 SQL、标签与数据源。
   - 支持指标类型：`gauge`、`counter`、`histogram`、`summary`
@@ -97,11 +98,12 @@ Web UI 提供了可视化的配置管理界面，包括：
 - 建议以业务域为前缀命名指标，例如 `sql2metrics_household_online`，标签使用小写英文。
 - 同一指标可附加多标签（如 `region`、`category`），Prometheus 抓取后即可用于维度分析。
 - 新增指标只需追加一段配置，无需重新编译或部署代码。
+- Redis 数据源目前仅允许只读命令（GET/HGET/LLEN/SCARD/ZCARD/EXISTS 等），建议针对计数类 key 使用简单聚合命令，避免写操作与 Lua。
 
 ## 运行与排查
 - 自监控指标：`collector_errors_total`（失败次数）、`collector_last_success_timestamp_seconds`（最近成功时间）。
 - 日志：执行每个指标会输出查询 SQL、执行耗时与结果，可快速定位慢查询或异常。
-- 若发生连接失败或权限错误，请检查数据库连通性、账号权限、SQL 是否在目标环境可执行。
+- 若发生连接失败或权限错误，请检查数据库连通性、账号权限、SQL/Redis 命令是否在目标环境可执行。
 
 ## 下一步规划
 - 扩展更多数据源（如 PostgreSQL、REST API）。

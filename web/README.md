@@ -34,4 +34,7 @@ npm run build
 - React Query (数据获取)
 - Framer Motion (动画)
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> 59c5b8e (feat: redis)
