@@ -3,6 +3,9 @@
 ## 项目简介
 sql2metrics 是一个以配置驱动的 Prometheus 指标采集器，能够定时执行数据库查询（当前支持 MySQL 与 IoTDB），并将结果转换为 Prometheus Metrics 暴露在 `/metrics` 端点。适用于快速将现有业务 SQL 转换为可监控的时间序列，用于观察趋势、告警与容量分析。
 
+<img width="2414" height="1444" alt="sql2metricdiagram-2025-12-12-095019" src="https://github.com/user-attachments/assets/f472d880-290a-455d-a37d-30da341cee73" />
+
+
 <img width="1305" height="623" alt="image" src="https://github.com/user-attachments/assets/02b7fdac-62c2-443b-9bbf-97f4f328aa04" />
 
 <img width="1349" height="556" alt="image" src="https://github.com/user-attachments/assets/1bf4a2e1-442b-46a3-a3d5-9ae735efbfc4" />
