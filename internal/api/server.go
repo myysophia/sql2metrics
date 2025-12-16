@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/company/ems-devices/internal/collectors"
 	"github.com/company/ems-devices/internal/config"
+	"github.com/company/ems-devices/web"
 )
 
 // Server 提供配置管理和数据源测试的 HTTP API。
@@ -78,6 +80,39 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case path == "/metrics":
 		s.service.GetPrometheusHandler().ServeHTTP(w, r)
 	default:
+		// 尝试从嵌入的静态文件中服务
+		distFS, err := web.GetDistFS()
+		if err != nil {
+			log.Printf("获取静态文件系统失败: %v", err)
+			http.NotFound(w, r)
+			return
+		}
+
+		// 检查文件是否存在
+		f, err := distFS.Open(strings.TrimPrefix(path, "/"))
+		if err == nil {
+			defer f.Close()
+			http.FileServer(http.FS(distFS)).ServeHTTP(w, r)
+			return
+		}
+
+		// 如果不是 API 请求且文件不存在，返回 index.html (SPA 支持)
+		// 但要排除带扩展名的静态资源请求 (如 .js, .css, .png 等)
+		if !strings.Contains(path, ".") {
+			indexFile, err := distFS.Open("index.html")
+			if err != nil {
+				log.Printf("无法打开 index.html: %v", err)
+				http.NotFound(w, r)
+				return
+			}
+			defer indexFile.Close()
+			
+			// 读取 index.html 内容并写入响应
+			stat, _ := indexFile.Stat()
+			http.ServeContent(w, r, "index.html", stat.ModTime(), indexFile.(io.ReadSeeker))
+			return
+		}
+
 		http.NotFound(w, r)
 	}
 }
