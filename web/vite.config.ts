@@ -14,8 +14,3 @@ export default defineConfig({
     },
   },
 })
-
-<<<<<<< HEAD
-
-=======
->>>>>>> 59c5b8e (feat: redis)

@@ -20,7 +20,7 @@ export default function SaveAndApply() {
       const result = await api.updateConfig(config)
       return result
     },
-    onSuccess: async (result) => {
+    onSuccess: async () => {
       setShowSuccess(true)
       queryClient.invalidateQueries({ queryKey: ['config'] })
       
@@ -110,8 +110,3 @@ export default function SaveAndApply() {
     </div>
   )
 }
-
-<<<<<<< HEAD
-
-=======
->>>>>>> 59c5b8e (feat: redis)

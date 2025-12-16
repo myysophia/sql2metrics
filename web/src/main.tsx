@@ -23,8 +23,3 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     </QueryClientProvider>
   </React.StrictMode>,
 )
-
-<<<<<<< HEAD
-
-=======
->>>>>>> 59c5b8e (feat: redis)

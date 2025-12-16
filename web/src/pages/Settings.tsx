@@ -111,8 +111,3 @@ export default function Settings() {
     </div>
   )
 }
-
-<<<<<<< HEAD
-
-=======
->>>>>>> 59c5b8e (feat: redis)

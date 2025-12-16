@@ -6,6 +6,7 @@ import (
 	"log"
 	"math"
 	"net/http"
+	"reflect"
 	"sync"
 	"time"
 
@@ -344,6 +345,8 @@ func (s *Service) ReloadConfig(newCfg *config.Config) ReloadResult {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	oldCfg := s.cfg
+
 	oldMetricNames := make(map[string]bool)
 	for _, holder := range s.metrics {
 		oldMetricNames[holder.spec.Name] = true
@@ -414,15 +417,30 @@ func (s *Service) ReloadConfig(newCfg *config.Config) ReloadResult {
 	}
 
 	for connName := range newMySQLConnections {
-		if _, exists := s.mysql[connName]; !exists {
-			mysqlCfg, ok := newCfg.MySQLConfigFor(connName)
-			if !ok {
-				return ReloadResult{
-					Success: false,
-					Error:   fmt.Sprintf("未找到 MySQL 连接 %s", connName),
-					Message: "热更新失败",
-				}
+		mysqlCfg, ok := newCfg.MySQLConfigFor(connName)
+		if !ok {
+			return ReloadResult{
+				Success: false,
+				Error:   fmt.Sprintf("未找到 MySQL 连接 %s", connName),
+				Message: "热更新失败",
 			}
+		}
+
+		if client, exists := s.mysql[connName]; exists {
+			var oldMySQL config.MySQLConfig
+			var hasOld bool
+			if oldCfg != nil {
+				oldMySQL, hasOld = oldCfg.MySQLConfigFor(connName)
+			}
+			if !hasOld || !mysqlConfigEqual(oldMySQL, mysqlCfg) {
+				log.Printf("检测到 MySQL 连接 %s 配置变更，准备重建连接", connName)
+				_ = client.Close()
+				delete(s.mysql, connName)
+				exists = false
+			}
+		}
+
+		if _, exists := s.mysql[connName]; !exists {
 			client, err := datasource.NewMySQLClient(mysqlCfg)
 			if err != nil {
 				return ReloadResult{
@@ -436,15 +454,30 @@ func (s *Service) ReloadConfig(newCfg *config.Config) ReloadResult {
 	}
 
 	for connName := range newRedisConnections {
-		if _, exists := s.redis[connName]; !exists {
-			redisCfg, ok := newCfg.RedisConfigFor(connName)
-			if !ok {
-				return ReloadResult{
-					Success: false,
-					Error:   fmt.Sprintf("未找到 Redis 连接 %s", connName),
-					Message: "热更新失败",
-				}
+		redisCfg, ok := newCfg.RedisConfigFor(connName)
+		if !ok {
+			return ReloadResult{
+				Success: false,
+				Error:   fmt.Sprintf("未找到 Redis 连接 %s", connName),
+				Message: "热更新失败",
 			}
+		}
+
+		if client, exists := s.redis[connName]; exists {
+			var oldRedis config.RedisConfig
+			var hasOld bool
+			if oldCfg != nil {
+				oldRedis, hasOld = oldCfg.RedisConfigFor(connName)
+			}
+			if !hasOld || !redisConfigEqual(oldRedis, redisCfg) {
+				log.Printf("检测到 Redis 连接 %s 配置变更，准备重建连接", connName)
+				_ = client.Close()
+				delete(s.redis, connName)
+				exists = false
+			}
+		}
+
+		if _, exists := s.redis[connName]; !exists {
 			client, err := datasource.NewRedisClient(redisCfg)
 			if err != nil {
 				return ReloadResult{
@@ -619,4 +652,23 @@ func labelsEqual(a, b map[string]string) bool {
 		}
 	}
 	return true
+}
+
+func mysqlConfigEqual(a, b config.MySQLConfig) bool {
+	return a.Host == b.Host &&
+		a.Port == b.Port &&
+		a.User == b.User &&
+		a.Password == b.Password &&
+		a.Database == b.Database &&
+		reflect.DeepEqual(a.Params, b.Params)
+}
+
+func redisConfigEqual(a, b config.RedisConfig) bool {
+	return a.Mode == b.Mode &&
+		a.Addr == b.Addr &&
+		a.Username == b.Username &&
+		a.Password == b.Password &&
+		a.DB == b.DB &&
+		a.EnableTLS == b.EnableTLS &&
+		a.SkipTLSVerify == b.SkipTLSVerify
 }

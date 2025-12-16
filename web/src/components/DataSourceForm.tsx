@@ -1,16 +1,6 @@
 import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { api } from '../api/client'
-<<<<<<< HEAD
-import type { MySQLConfig, IoTDBConfig } from '../types/config'
-
-interface DataSourceFormProps {
-  type: 'mysql' | 'iotdb'
-  initialConfig: MySQLConfig | IoTDBConfig
-  onSave: (config: MySQLConfig | IoTDBConfig) => void
-  onCancel: () => void
-}
-=======
 import type { MySQLConfig, IoTDBConfig, RedisConfig } from '../types/config'
 
 interface DataSourceFormProps {
@@ -19,62 +9,32 @@ interface DataSourceFormProps {
   onSave: (config: MySQLConfig | IoTDBConfig | RedisConfig) => void
   onCancel: () => void
 }
->>>>>>> 59c5b8e (feat: redis)
 
 export default function DataSourceForm({ type, initialConfig, onSave, onCancel }: DataSourceFormProps) {
   const [config, setConfig] = useState(initialConfig)
   const [testing, setTesting] = useState(false)
-<<<<<<< HEAD
-  const [testResult, setTestResult] = useState<{ success: boolean; message?: string; error?: string } | null>(null)
-
-  const testMutation = useMutation({
-    mutationFn: async () => {
-      if (type === 'mysql') {
-        return api.testMySQL(config as MySQLConfig)
-      } else {
-        return api.testIoTDB(config as IoTDBConfig)
-      }
-=======
   const [testResult, setTestResult] = useState<{ success: boolean; message?: string } | null>(null)
 
   const testMutation = useMutation({
     mutationFn: async () => {
-      if (type === 'mysql') {
-        return api.testMySQL(config as MySQLConfig)
-      }
-      if (type === 'iotdb') {
-        return api.testIoTDB(config as IoTDBConfig)
-      }
+      if (type === 'mysql') return api.testMySQL(config as MySQLConfig)
+      if (type === 'iotdb') return api.testIoTDB(config as IoTDBConfig)
       return api.testRedis(config as RedisConfig)
->>>>>>> 59c5b8e (feat: redis)
     },
     onMutate: () => {
       setTesting(true)
       setTestResult(null)
     },
     onSuccess: (result) => {
-<<<<<<< HEAD
-      // 后端返回 success: false 时，也作为错误处理
       if (!result.success) {
-        setTestResult({
-          success: false,
-          error: result.error || '连接失败',
-          message: result.error || result.message || '连接失败',
-        })
+        setTestResult({ success: false, message: result.error || result.message || '连接失败' })
       } else {
-        setTestResult(result)
+        setTestResult({ success: true, message: result.message })
       }
       setTesting(false)
     },
     onError: (error: Error) => {
-      setTestResult({ success: false, message: error.message, error: error.message })
-=======
-      setTestResult(result)
-      setTesting(false)
-    },
-    onError: (error: Error) => {
       setTestResult({ success: false, message: error.message })
->>>>>>> 59c5b8e (feat: redis)
       setTesting(false)
     },
   })
@@ -138,6 +98,7 @@ export default function DataSourceForm({ type, initialConfig, onSave, onCancel }
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus-visible-ring"
           />
         </div>
+
         <div className="flex items-center space-x-4">
           <button
             type="button"
@@ -149,16 +110,11 @@ export default function DataSourceForm({ type, initialConfig, onSave, onCancel }
           </button>
           {testResult && (
             <span className={testResult.success ? 'text-green-600' : 'text-red-600'}>
-<<<<<<< HEAD
-              {testResult.success 
-                ? `✓ ${testResult.message || '连接成功'}` 
-                : `✗ ${testResult.error || testResult.message || '连接失败'}`}
-=======
               {testResult.success ? '✓ 连接成功' : `✗ ${testResult.message}`}
->>>>>>> 59c5b8e (feat: redis)
             </span>
           )}
         </div>
+
         <div className="flex justify-end space-x-2">
           <button
             type="button"
@@ -167,10 +123,7 @@ export default function DataSourceForm({ type, initialConfig, onSave, onCancel }
           >
             取消
           </button>
-          <button
-            type="submit"
-            className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 focus-visible-ring"
-          >
+          <button type="submit" className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 focus-visible-ring">
             保存
           </button>
         </div>
@@ -178,9 +131,6 @@ export default function DataSourceForm({ type, initialConfig, onSave, onCancel }
     )
   }
 
-<<<<<<< HEAD
-  const iotdbConfig = config as IoTDBConfig
-=======
   if (type === 'redis') {
     const redisConfig = config as RedisConfig
     return (
@@ -193,8 +143,12 @@ export default function DataSourceForm({ type, initialConfig, onSave, onCancel }
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus-visible-ring"
           >
             <option value="standalone">Standalone</option>
-            <option value="sentinel" disabled>Sentinel（暂不支持）</option>
-            <option value="cluster" disabled>Cluster（暂不支持）</option>
+            <option value="sentinel" disabled>
+              Sentinel（暂不支持）
+            </option>
+            <option value="cluster" disabled>
+              Cluster（暂不支持）
+            </option>
           </select>
         </div>
         <div>
@@ -248,7 +202,9 @@ export default function DataSourceForm({ type, initialConfig, onSave, onCancel }
               onChange={(e) => setConfig({ ...redisConfig, enable_tls: e.target.checked })}
               className="h-4 w-4 text-primary-600 border-gray-300 rounded focus-visible-ring"
             />
-            <label htmlFor="redis-tls" className="text-sm text-gray-700">启用 TLS</label>
+            <label htmlFor="redis-tls" className="text-sm text-gray-700">
+              启用 TLS
+            </label>
           </div>
         </div>
         {redisConfig.enable_tls && (
@@ -260,9 +216,12 @@ export default function DataSourceForm({ type, initialConfig, onSave, onCancel }
               onChange={(e) => setConfig({ ...redisConfig, skip_tls_verify: e.target.checked })}
               className="h-4 w-4 text-primary-600 border-gray-300 rounded focus-visible-ring"
             />
-            <label htmlFor="redis-skip-verify" className="text-sm text-gray-700">跳过证书验证（仅测试环境）</label>
+            <label htmlFor="redis-skip-verify" className="text-sm text-gray-700">
+              跳过证书验证（仅测试环境）
+            </label>
           </div>
         )}
+
         <div className="flex items-center space-x-4">
           <button
             type="button"
@@ -278,6 +237,7 @@ export default function DataSourceForm({ type, initialConfig, onSave, onCancel }
             </span>
           )}
         </div>
+
         <div className="flex justify-end space-x-2">
           <button
             type="button"
@@ -286,10 +246,7 @@ export default function DataSourceForm({ type, initialConfig, onSave, onCancel }
           >
             取消
           </button>
-          <button
-            type="submit"
-            className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 focus-visible-ring"
-          >
+          <button type="submit" className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 focus-visible-ring">
             保存
           </button>
         </div>
@@ -298,7 +255,6 @@ export default function DataSourceForm({ type, initialConfig, onSave, onCancel }
   }
 
   const iotdbConfig = config as IoTDBConfig
->>>>>>> 59c5b8e (feat: redis)
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
@@ -350,6 +306,7 @@ export default function DataSourceForm({ type, initialConfig, onSave, onCancel }
           className="w-full px-3 py-2 border border-gray-300 rounded-md focus-visible-ring"
         />
       </div>
+
       <div className="flex items-center space-x-4">
         <button
           type="button"
@@ -361,16 +318,11 @@ export default function DataSourceForm({ type, initialConfig, onSave, onCancel }
         </button>
         {testResult && (
           <span className={testResult.success ? 'text-green-600' : 'text-red-600'}>
-<<<<<<< HEAD
-            {testResult.success 
-              ? `✓ ${testResult.message || '连接成功'}` 
-              : `✗ ${testResult.error || testResult.message || '连接失败'}`}
-=======
             {testResult.success ? '✓ 连接成功' : `✗ ${testResult.message}`}
->>>>>>> 59c5b8e (feat: redis)
           </span>
         )}
       </div>
+
       <div className="flex justify-end space-x-2">
         <button
           type="button"
@@ -379,18 +331,10 @@ export default function DataSourceForm({ type, initialConfig, onSave, onCancel }
         >
           取消
         </button>
-        <button
-          type="submit"
-          className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 focus-visible-ring"
-        >
+        <button type="submit" className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 focus-visible-ring">
           保存
         </button>
       </div>
     </form>
   )
 }
-
-<<<<<<< HEAD
-
-=======
->>>>>>> 59c5b8e (feat: redis)

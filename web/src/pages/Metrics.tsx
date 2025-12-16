@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { api } from '../api/client'
-import type { Config, MetricSpec } from '../types/config'
+import type { MetricSpec } from '../types/config'
 import MetricForm from '../components/MetricForm'
 import SaveAndApply from '../components/SaveAndApply'
 
@@ -137,8 +137,3 @@ export default function Metrics() {
     </div>
   )
 }
-
-<<<<<<< HEAD
-
-=======
->>>>>>> 59c5b8e (feat: redis)

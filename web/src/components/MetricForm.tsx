@@ -16,10 +16,16 @@ export default function MetricForm({ metric: initialMetric, config, onSave, onCa
   const [previewing, setPreviewing] = useState(false)
   const [previewResult, setPreviewResult] = useState<{ success: boolean; value?: number; error?: string } | null>(null)
 
+  const metricTypeTips: Record<MetricSpec['type'], string> = {
+    gauge: 'Gauge：表示某一时刻的数值快照，可上可下（例如温度、队列长度）。',
+    counter: 'Counter：只增不减的累计值（例如请求总数、错误总数）。',
+    histogram: 'Histogram：按桶统计分布，适合延迟/大小等需要分布的指标。',
+    summary: 'Summary：在客户端计算分位数，适合看 P99 等分位但聚合能力有限。',
+  }
+
   const queryClient = useQueryClient()
 
   const previewMutation = useMutation({
-<<<<<<< HEAD
     mutationFn: () =>
       api.previewQuery({
         source: metric.source,
@@ -27,15 +33,6 @@ export default function MetricForm({ metric: initialMetric, config, onSave, onCa
         connection: metric.connection,
         result_field: metric.result_field,
       }),
-=======
-    mutationFn: () =>
-      api.previewQuery({
-        source: metric.source,
-        query: metric.query,
-        connection: metric.connection,
-        result_field: metric.result_field,
-      }),
->>>>>>> 59c5b8e (feat: redis)
     onMutate: () => {
       setPreviewing(true)
       setPreviewResult(null)
@@ -54,9 +51,8 @@ export default function MetricForm({ metric: initialMetric, config, onSave, onCa
     mutationFn: async () => {
       if (initialMetric.name && initialMetric.name === metric.name) {
         return api.updateMetric(metric.name, metric)
-      } else {
-        return api.createMetric(metric)
       }
+      return api.createMetric(metric)
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['config'] })
@@ -69,12 +65,8 @@ export default function MetricForm({ metric: initialMetric, config, onSave, onCa
     saveMutation.mutate()
   }
 
-<<<<<<< HEAD
-  const mysqlConnections = Object.keys(config.mysql_connections || {})
-=======
   const mysqlConnections = Object.keys(config.mysql_connections || {})
   const redisConnections = Object.keys(config.redis_connections || {})
->>>>>>> 59c5b8e (feat: redis)
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
@@ -98,6 +90,13 @@ export default function MetricForm({ metric: initialMetric, config, onSave, onCa
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
             指标类型 <span className="text-red-500">*</span>
+            <span
+              className="ml-2 inline-flex h-5 w-5 items-center justify-center rounded-full border border-gray-300 text-xs text-gray-600 cursor-help"
+              title={metricTypeTips[metric.type]}
+              aria-label={metricTypeTips[metric.type]}
+            >
+              ?
+            </span>
           </label>
           <select
             value={metric.type}
@@ -122,7 +121,7 @@ export default function MetricForm({ metric: initialMetric, config, onSave, onCa
           onChange={(e) => setMetric({ ...metric, help: e.target.value })}
           required
           className="w-full px-3 py-2 border border-gray-300 rounded-md focus-visible-ring"
-          placeholder="户储设备总量"
+          placeholder="家庭用电量"
         />
       </div>
 
@@ -133,18 +132,7 @@ export default function MetricForm({ metric: initialMetric, config, onSave, onCa
           </label>
           <select
             value={metric.source}
-<<<<<<< HEAD
-            onChange={(e) => setMetric({ ...metric, source: e.target.value as 'mysql' | 'iotdb' })}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus-visible-ring"
-          >
-            <option value="mysql">MySQL</option>
-            <option value="iotdb">IoTDB</option>
-          </select>
-        </div>
-
-        {metric.source === 'mysql' && mysqlConnections.length > 0 && (
-=======
-            onChange={(e) => setMetric({ ...metric, source: e.target.value as MetricSpec['source'] })}
+            onChange={(e) => setMetric({ ...metric, source: e.target.value as MetricSpec['source'], connection: undefined, result_field: undefined })}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus-visible-ring"
           >
             <option value="mysql">MySQL</option>
@@ -154,7 +142,6 @@ export default function MetricForm({ metric: initialMetric, config, onSave, onCa
         </div>
 
         {metric.source === 'mysql' && mysqlConnections.length > 0 && (
->>>>>>> 59c5b8e (feat: redis)
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">连接</label>
             <select
@@ -166,18 +153,6 @@ export default function MetricForm({ metric: initialMetric, config, onSave, onCa
                 <option key={conn} value={conn}>
                   {conn}
                 </option>
-<<<<<<< HEAD
-              ))}
-            </select>
-          </div>
-        )}
-
-        {metric.source === 'iotdb' && (
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">结果字段</label>
-            <input
-              type="text"
-=======
               ))}
             </select>
           </div>
@@ -205,7 +180,6 @@ export default function MetricForm({ metric: initialMetric, config, onSave, onCa
             <label className="block text-sm font-medium text-gray-700 mb-1">结果字段</label>
             <input
               type="text"
->>>>>>> 59c5b8e (feat: redis)
               value={metric.result_field || ''}
               onChange={(e) => setMetric({ ...metric, result_field: e.target.value || undefined })}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus-visible-ring"
@@ -218,13 +192,8 @@ export default function MetricForm({ metric: initialMetric, config, onSave, onCa
       <div>
         <div className="flex justify-between items-center mb-2">
           <label className="block text-sm font-medium text-gray-700">
-<<<<<<< HEAD
-            SQL 查询 <span className="text-red-500">*</span>
-          </label>
-=======
             查询/命令 <span className="text-red-500">*</span>
           </label>
->>>>>>> 59c5b8e (feat: redis)
           <button
             type="button"
             onClick={() => previewMutation.mutate()}
@@ -251,7 +220,9 @@ export default function MetricForm({ metric: initialMetric, config, onSave, onCa
         {previewResult && (
           <div className={`mt-2 p-2 rounded ${previewResult.success ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>
             {previewResult.success ? (
-              <div>查询结果: <span className="font-mono font-bold">{previewResult.value}</span></div>
+              <div>
+                查询结果: <span className="font-mono font-bold">{previewResult.value}</span>
+              </div>
             ) : (
               <div>错误: {previewResult.error}</div>
             )}
@@ -351,14 +322,9 @@ export default function MetricForm({ metric: initialMetric, config, onSave, onCa
               const objectives: Record<number, number> = {}
               e.target.value.split(',').forEach((pair) => {
                 const [k, v] = pair.split(':').map((s) => parseFloat(s.trim()))
-                if (!isNaN(k) && !isNaN(v)) {
-                  objectives[k] = v
-                }
+                if (!isNaN(k) && !isNaN(v)) objectives[k] = v
               })
-              setMetric({
-                ...metric,
-                objectives: Object.keys(objectives).length > 0 ? objectives : undefined,
-              })
+              setMetric({ ...metric, objectives: Object.keys(objectives).length > 0 ? objectives : undefined })
             }}
             placeholder="0.5:0.05, 0.9:0.01, 0.99:0.001"
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus-visible-ring"
@@ -385,8 +351,3 @@ export default function MetricForm({ metric: initialMetric, config, onSave, onCa
     </form>
   )
 }
-
-<<<<<<< HEAD
-
-=======
->>>>>>> 59c5b8e (feat: redis)

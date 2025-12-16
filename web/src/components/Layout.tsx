@@ -54,8 +54,3 @@ export default function Layout({ children }: LayoutProps) {
     </div>
   )
 }
-
-<<<<<<< HEAD
-
-=======
->>>>>>> 59c5b8e (feat: redis)

@@ -3,12 +3,6 @@
 @tailwind utilities;
 
 @layer base {
-<<<<<<< HEAD
-=======
-  * {
-    @apply border-border;
-  }
->>>>>>> 59c5b8e (feat: redis)
   body {
     @apply bg-gray-50 text-gray-900;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
@@ -56,8 +50,3 @@ select {
 .tabular-nums {
   font-variant-numeric: tabular-nums;
 }
-
-<<<<<<< HEAD
-
-=======
->>>>>>> 59c5b8e (feat: redis)
