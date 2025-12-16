@@ -2,6 +2,14 @@ import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
 import { api } from '../api/client'
+import { Button } from '@/components/ui/button'
+import {
+  Card,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
+import { Loader2, CheckCircle2, AlertCircle } from 'lucide-react'
 
 export default function SaveAndApply() {
   const queryClient = useQueryClient()
@@ -23,7 +31,7 @@ export default function SaveAndApply() {
     onSuccess: async () => {
       setShowSuccess(true)
       queryClient.invalidateQueries({ queryKey: ['config'] })
-      
+
       // 获取 metrics URL 并打开浏览器
       try {
         const { url } = await api.getMetricsURL()
@@ -38,68 +46,63 @@ export default function SaveAndApply() {
   })
 
   return (
-    <div className="bg-white rounded-lg shadow p-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-semibold mb-1">保存并应用配置</h3>
-          <p className="text-sm text-gray-600">
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 p-6">
+        <div className="space-y-1">
+          <CardTitle>保存并应用配置</CardTitle>
+          <CardDescription>
             验证配置后，将触发热更新并自动打开 metrics 端点
-          </p>
+          </CardDescription>
         </div>
-        <button
+        <Button
           onClick={() => saveAndApplyMutation.mutate()}
           disabled={saveAndApplyMutation.isPending}
-          className="px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed focus-visible-ring font-medium flex items-center space-x-2"
         >
           {saveAndApplyMutation.isPending ? (
             <>
-              <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              <span>应用中…</span>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              应用中…
             </>
           ) : (
-            <span>保存并应用</span>
+            '保存并应用'
           )}
-        </button>
-      </div>
+        </Button>
+      </CardHeader>
 
       <AnimatePresence>
         {saveAndApplyMutation.isError && (
           <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-800"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="px-6 pb-6"
           >
-            <div className="font-medium">应用失败</div>
-            <div className="text-sm mt-1">
-              {saveAndApplyMutation.error instanceof Error
-                ? saveAndApplyMutation.error.message
-                : '未知错误'}
+            <div className="p-4 bg-destructive/10 text-destructive border border-destructive/20 rounded-md flex items-center gap-2">
+              <AlertCircle className="h-4 w-4" />
+              <div>
+                <div className="font-medium">应用失败</div>
+                <div className="text-sm">
+                  {saveAndApplyMutation.error instanceof Error
+                    ? saveAndApplyMutation.error.message
+                    : '未知错误'}
+                </div>
+              </div>
             </div>
           </motion.div>
         )}
 
         {showSuccess && (
           <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg text-green-800"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="px-6 pb-6"
           >
-            <div className="flex items-center space-x-2">
-              <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-                <path
-                  fillRule="evenodd"
-                  d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                  clipRule="evenodd"
-                />
-              </svg>
+            <div className="p-4 bg-green-50 text-green-900 border border-green-200 rounded-md flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-green-600" />
               <div>
                 <div className="font-medium">配置已应用成功！</div>
-                <div className="text-sm mt-1">
+                <div className="text-sm">
                   {saveAndApplyMutation.data?.reload?.message || 'Metrics 端点已在新标签页打开'}
                 </div>
               </div>
@@ -107,6 +110,6 @@ export default function SaveAndApply() {
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
+    </Card>
   )
 }

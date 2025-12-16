@@ -4,6 +4,17 @@ import { api } from '../api/client'
 import type { MetricSpec } from '../types/config'
 import MetricForm from '../components/MetricForm'
 import SaveAndApply from '../components/SaveAndApply'
+import { Button } from '@/components/ui/button'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Plus, Edit2, Trash2 } from 'lucide-react'
 
 export default function Metrics() {
   const queryClient = useQueryClient()
@@ -32,10 +43,10 @@ export default function Metrics() {
   }
 
   return (
-    <div>
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold">指标管理</h2>
-        <button
+    <div className="space-y-8">
+      <div className="flex justify-between items-center">
+        <h2 className="text-3xl font-bold tracking-tight">指标管理</h2>
+        <Button
           onClick={() => {
             setIsCreating(true)
             setEditingMetric({
@@ -46,89 +57,81 @@ export default function Metrics() {
               query: '',
             })
           }}
-          className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 focus-visible-ring"
         >
-          添加指标
-        </button>
+          <Plus className="mr-2 h-4 w-4" /> 添加指标
+        </Button>
       </div>
 
       {(editingMetric || isCreating) && (
-        <div className="bg-white rounded-lg shadow p-6 mb-6">
-          <h3 className="text-lg font-semibold mb-4">
-            {isCreating ? '创建新指标' : '编辑指标'}
-          </h3>
-          <MetricForm
-            metric={editingMetric!}
-            config={config}
-            onSave={() => {
-              setEditingMetric(null)
-              setIsCreating(false)
-              queryClient.invalidateQueries({ queryKey: ['config'] })
-            }}
-            onCancel={() => {
-              setEditingMetric(null)
-              setIsCreating(false)
-            }}
-          />
-        </div>
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>{isCreating ? '创建新指标' : '编辑指标'}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <MetricForm
+              metric={editingMetric!}
+              config={config}
+              onSave={() => {
+                setEditingMetric(null)
+                setIsCreating(false)
+                queryClient.invalidateQueries({ queryKey: ['config'] })
+              }}
+              onCancel={() => {
+                setEditingMetric(null)
+                setIsCreating(false)
+              }}
+            />
+          </CardContent>
+        </Card>
       )}
 
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                名称
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                类型
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                数据源
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                帮助信息
-              </th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                操作
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
+      <div className="rounded-md border bg-white">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>名称</TableHead>
+              <TableHead>类型</TableHead>
+              <TableHead>数据源</TableHead>
+              <TableHead>帮助信息</TableHead>
+              <TableHead className="text-right">操作</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {config.metrics.map((metric) => (
-              <tr key={metric.name}>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                  {metric.name}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {metric.type}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+              <TableRow key={metric.name}>
+                <TableCell className="font-medium">{metric.name}</TableCell>
+                <TableCell>{metric.type}</TableCell>
+                <TableCell>
                   {metric.source}
                   {metric.connection && ` (${metric.connection})`}
-                </td>
-                <td className="px-6 py-4 text-sm text-gray-500">{metric.help}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                  <button
-                    onClick={() => {
-                      setEditingMetric(metric)
-                      setIsCreating(false)
-                    }}
-                    className="text-primary-600 hover:text-primary-900 mr-4 focus-visible-ring"
-                  >
-                    编辑
-                  </button>
-                  <button
-                    onClick={() => handleDelete(metric.name)}
-                    className="text-red-600 hover:text-red-900 focus-visible-ring"
-                  >
-                    删除
-                  </button>
-                </td>
-              </tr>
+                </TableCell>
+                <TableCell>{metric.help}</TableCell>
+                <TableCell className="text-right">
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => {
+                        setEditingMetric(metric)
+                        setIsCreating(false)
+                      }}
+                    >
+                      <Edit2 className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleDelete(metric.name)}
+                      className="text-destructive hover:text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
 
       <div className="mt-6">

@@ -3,6 +3,23 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import Editor from '@monaco-editor/react'
 import { api } from '../api/client'
 import type { Config, MetricSpec } from '../types/config'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Loader2, Plus, Trash2, HelpCircle } from 'lucide-react'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 
 interface MetricFormProps {
   metric: MetricSpec
@@ -71,139 +88,160 @@ export default function MetricForm({ metric: initialMetric, config, onSave, onCa
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+        <div className="space-y-2">
+          <Label>
             指标名称 <span className="text-red-500">*</span>
-          </label>
-          <input
-            type="text"
-            value={metric.name}
-            onChange={(e) => setMetric({ ...metric, name: e.target.value })}
-            required
-            pattern="[a-zA-Z_:][a-zA-Z0-9_:]*"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus-visible-ring"
-            placeholder="energy_household_total"
-          />
-          <p className="mt-1 text-xs text-gray-500">只能包含字母、数字、下划线和冒号</p>
+          </Label>
+          <div className="space-y-1">
+            <Input
+              type="text"
+              value={metric.name}
+              onChange={(e) => setMetric({ ...metric, name: e.target.value })}
+              required
+              pattern="[a-zA-Z_:][a-zA-Z0-9_:]*"
+              placeholder="energy_household_total"
+            />
+            <p className="text-xs text-muted-foreground">只能包含字母、数字、下划线和冒号</p>
+          </div>
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+        <div className="space-y-2">
+          <Label className="flex items-center gap-1">
             指标类型 <span className="text-red-500">*</span>
-            <span
-              className="ml-2 inline-flex h-5 w-5 items-center justify-center rounded-full border border-gray-300 text-xs text-gray-600 cursor-help"
-              title={metricTypeTips[metric.type]}
-              aria-label={metricTypeTips[metric.type]}
-            >
-              ?
-            </span>
-          </label>
-          <select
+            {/* Tooltip requires provider, assuming global or local. Using local for safety if not in Layout */}
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{metricTypeTips[metric.type]}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </Label>
+          <Select
             value={metric.type}
-            onChange={(e) => setMetric({ ...metric, type: e.target.value as MetricSpec['type'] })}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus-visible-ring"
+            onValueChange={(value) => setMetric({ ...metric, type: value as MetricSpec['type'] })}
           >
-            <option value="gauge">Gauge</option>
-            <option value="counter">Counter</option>
-            <option value="histogram">Histogram</option>
-            <option value="summary">Summary</option>
-          </select>
+            <SelectTrigger>
+              <SelectValue placeholder="选择类型" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="gauge">Gauge</SelectItem>
+              <SelectItem value="counter">Counter</SelectItem>
+              <SelectItem value="histogram">Histogram</SelectItem>
+              <SelectItem value="summary">Summary</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
+      <div className="space-y-2">
+        <Label>
           帮助信息 <span className="text-red-500">*</span>
-        </label>
-        <input
+        </Label>
+        <Input
           type="text"
           value={metric.help}
           onChange={(e) => setMetric({ ...metric, help: e.target.value })}
           required
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus-visible-ring"
           placeholder="家庭用电量"
         />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+        <div className="space-y-2">
+          <Label>
             数据源 <span className="text-red-500">*</span>
-          </label>
-          <select
+          </Label>
+          <Select
             value={metric.source}
-            onChange={(e) => setMetric({ ...metric, source: e.target.value as MetricSpec['source'], connection: undefined, result_field: undefined })}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus-visible-ring"
+            onValueChange={(value) => setMetric({ ...metric, source: value as MetricSpec['source'], connection: undefined, result_field: undefined })}
           >
-            <option value="mysql">MySQL</option>
-            <option value="iotdb">IoTDB</option>
-            <option value="redis">Redis</option>
-          </select>
+            <SelectTrigger>
+              <SelectValue placeholder="选择数据源" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="mysql">MySQL</SelectItem>
+              <SelectItem value="iotdb">IoTDB</SelectItem>
+              <SelectItem value="redis">Redis</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         {metric.source === 'mysql' && mysqlConnections.length > 0 && (
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">连接</label>
-            <select
-              value={metric.connection || 'default'}
-              onChange={(e) => setMetric({ ...metric, connection: e.target.value || undefined })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus-visible-ring"
+          <div className="space-y-2">
+            <Label>连接</Label>
+            <Select
+              value={metric.connection}
+              onValueChange={(value) => setMetric({ ...metric, connection: value })}
             >
-              {mysqlConnections.map((conn) => (
-                <option key={conn} value={conn}>
-                  {conn}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger>
+                <SelectValue placeholder="选择连接" />
+              </SelectTrigger>
+              <SelectContent>
+                {mysqlConnections.map((conn) => (
+                  <SelectItem key={conn} value={conn}>
+                    {conn}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         )}
 
         {metric.source === 'redis' && redisConnections.length > 0 && (
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">连接</label>
-            <select
-              value={metric.connection || 'default'}
-              onChange={(e) => setMetric({ ...metric, connection: e.target.value || undefined })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus-visible-ring"
+          <div className="space-y-2">
+            <Label>连接</Label>
+            <Select
+              value={metric.connection}
+              onValueChange={(value) => setMetric({ ...metric, connection: value })}
             >
-              {redisConnections.map((conn) => (
-                <option key={conn} value={conn}>
-                  {conn}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger>
+                <SelectValue placeholder="选择连接" />
+              </SelectTrigger>
+              <SelectContent>
+                {redisConnections.map((conn) => (
+                  <SelectItem key={conn} value={conn}>
+                    {conn}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         )}
 
         {metric.source === 'iotdb' && (
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">结果字段</label>
-            <input
+          <div className="space-y-2">
+            <Label>结果字段</Label>
+            <Input
               type="text"
               value={metric.result_field || ''}
               onChange={(e) => setMetric({ ...metric, result_field: e.target.value || undefined })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus-visible-ring"
               placeholder="留空则使用第一列"
             />
           </div>
         )}
       </div>
 
-      <div>
-        <div className="flex justify-between items-center mb-2">
-          <label className="block text-sm font-medium text-gray-700">
+      <div className="space-y-2">
+        <div className="flex justify-between items-center">
+          <Label>
             查询/命令 <span className="text-red-500">*</span>
-          </label>
-          <button
+          </Label>
+          <Button
             type="button"
+            variant="secondary"
+            size="sm"
             onClick={() => previewMutation.mutate()}
             disabled={previewing || !metric.query}
-            className="px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300 disabled:opacity-50 focus-visible-ring"
           >
+            {previewing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
             {previewing ? '预览中…' : '预览查询'}
-          </button>
+          </Button>
         </div>
-        <div className="border border-gray-300 rounded-md overflow-hidden">
+        <div className="border rounded-md overflow-hidden">
           <Editor
             height="200px"
             defaultLanguage="sql"
@@ -218,7 +256,7 @@ export default function MetricForm({ metric: initialMetric, config, onSave, onCa
           />
         </div>
         {previewResult && (
-          <div className={`mt-2 p-2 rounded ${previewResult.success ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>
+          <div className={`mt-2 p-2 rounded text-sm ${previewResult.success ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>
             {previewResult.success ? (
               <div>
                 查询结果: <span className="font-mono font-bold">{previewResult.value}</span>
@@ -230,12 +268,12 @@ export default function MetricForm({ metric: initialMetric, config, onSave, onCa
         )}
       </div>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">标签</label>
+      <div className="space-y-2">
+        <Label>标签</Label>
         <div className="space-y-2">
           {Object.entries(metric.labels || {}).map(([key, value], index) => (
             <div key={index} className="flex space-x-2">
-              <input
+              <Input
                 type="text"
                 value={key}
                 onChange={(e) => {
@@ -245,9 +283,9 @@ export default function MetricForm({ metric: initialMetric, config, onSave, onCa
                   setMetric({ ...metric, labels: newLabels })
                 }}
                 placeholder="标签键"
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus-visible-ring"
+                className="flex-1"
               />
-              <input
+              <Input
                 type="text"
                 value={value}
                 onChange={(e) => {
@@ -257,40 +295,44 @@ export default function MetricForm({ metric: initialMetric, config, onSave, onCa
                   })
                 }}
                 placeholder="标签值"
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus-visible-ring"
+                className="flex-1"
               />
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="icon"
                 onClick={() => {
                   const newLabels = { ...metric.labels }
                   delete newLabels[key]
                   setMetric({ ...metric, labels: newLabels })
                 }}
-                className="px-3 py-2 text-red-600 hover:text-red-700 focus-visible-ring"
+                className="text-destructive hover:text-destructive/90"
               >
-                删除
-              </button>
+                <Trash2 className="h-4 w-4" />
+              </Button>
             </div>
           ))}
-          <button
+          <Button
             type="button"
+            variant="outline"
+            size="sm"
             onClick={() => {
               setMetric({
                 ...metric,
                 labels: { ...(metric.labels || {}), '': '' },
               })
             }}
-            className="text-sm text-primary-600 hover:text-primary-700 focus-visible-ring"
+            className="w-full border-dashed"
           >
-            + 添加标签
-          </button>
+            <Plus className="mr-2 h-4 w-4" /> 添加标签
+          </Button>
         </div>
       </div>
 
       {metric.type === 'histogram' && (
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Buckets</label>
-          <input
+        <div className="space-y-2">
+          <Label>Buckets</Label>
+          <Input
             type="text"
             value={metric.buckets?.join(',') || ''}
             onChange={(e) => {
@@ -301,21 +343,20 @@ export default function MetricForm({ metric: initialMetric, config, onSave, onCa
               setMetric({ ...metric, buckets: buckets.length > 0 ? buckets : undefined })
             }}
             placeholder="0.005, 0.01, 0.025, 0.05, 0.1, ..."
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus-visible-ring"
           />
         </div>
       )}
 
       {metric.type === 'summary' && (
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Objectives</label>
-          <input
+        <div className="space-y-2">
+          <Label>Objectives</Label>
+          <Input
             type="text"
             value={
               metric.objectives
                 ? Object.entries(metric.objectives)
-                    .map(([k, v]) => `${k}:${v}`)
-                    .join(', ')
+                  .map(([k, v]) => `${k}:${v}`)
+                  .join(', ')
                 : ''
             }
             onChange={(e) => {
@@ -327,26 +368,21 @@ export default function MetricForm({ metric: initialMetric, config, onSave, onCa
               setMetric({ ...metric, objectives: Object.keys(objectives).length > 0 ? objectives : undefined })
             }}
             placeholder="0.5:0.05, 0.9:0.01, 0.99:0.001"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus-visible-ring"
           />
         </div>
       )}
 
       <div className="flex justify-end space-x-2">
-        <button
-          type="button"
-          onClick={onCancel}
-          className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50 focus-visible-ring"
-        >
+        <Button type="button" variant="outline" onClick={onCancel}>
           取消
-        </button>
-        <button
+        </Button>
+        <Button
           type="submit"
           disabled={saveMutation.isPending}
-          className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 disabled:opacity-50 focus-visible-ring"
         >
+          {saveMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
           {saveMutation.isPending ? '保存中…' : '保存'}
-        </button>
+        </Button>
       </div>
     </form>
   )

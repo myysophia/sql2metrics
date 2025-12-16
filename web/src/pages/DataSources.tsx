@@ -3,6 +3,16 @@ import { useState } from 'react'
 import { api } from '../api/client'
 import type { Config, MySQLConfig, IoTDBConfig, RedisConfig } from '../types/config'
 import DataSourceForm from '../components/DataSourceForm'
+import { Button } from '@/components/ui/button'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
+import { Plus, Edit2, Trash2, Database, Server } from 'lucide-react'
+import { AddConnectionDialog } from '@/components/AddConnectionDialog'
 
 export default function DataSources() {
   const queryClient = useQueryClient()
@@ -14,6 +24,9 @@ export default function DataSources() {
   const [editingMySQL, setEditingMySQL] = useState<string | null>(null)
   const [editingIoTDB, setEditingIoTDB] = useState(false)
   const [editingRedis, setEditingRedis] = useState<string | null>(null)
+
+  const [isAddMySQLDialogOpen, setIsAddMySQLDialogOpen] = useState(false)
+  const [isAddRedisDialogOpen, setIsAddRedisDialogOpen] = useState(false)
 
   const updateConfigMutation = useMutation({
     mutationFn: (newConfig: Config) => api.updateConfig(newConfig),
@@ -102,142 +115,237 @@ export default function DataSources() {
   }
 
   return (
-    <div>
-      <h2 className="text-2xl font-bold mb-6">数据源管理</h2>
+    <div className="space-y-8">
+      <div className="flex items-center justify-between">
+        <h2 className="text-3xl font-bold tracking-tight">数据源管理</h2>
+      </div>
 
       {/* MySQL 连接 */}
-      <div className="bg-white rounded-lg shadow p-6 mb-6">
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-semibold">MySQL 连接</h3>
-          <button
-            onClick={() => {
-              const name = prompt('请输入连接名称:')
-              if (name) setEditingMySQL(name)
-            }}
-            className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 focus-visible-ring"
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <div className="space-y-1">
+            <CardTitle className="text-xl flex items-center gap-2">
+              <Database className="h-5 w-5" /> MySQL 连接
+            </CardTitle>
+            <CardDescription>管理 MySQL 数据库连接配置</CardDescription>
+          </div>
+          <Button
+            onClick={() => setIsAddMySQLDialogOpen(true)}
+            size="sm"
           >
-            添加连接
-          </button>
-        </div>
-
-        <div className="space-y-4">
-          {mysqlList.map(([name, mysqlConfig]) => (
-            <div key={name} className="border border-gray-200 rounded-lg p-4">
-              <div className="flex justify-between items-center mb-2">
-                <h4 className="font-medium">{name}</h4>
-                <div className="space-x-2">
-                  <button onClick={() => setEditingMySQL(name)} className="text-primary-600 hover:text-primary-700 focus-visible-ring">
-                    编辑
-                  </button>
-                  {name !== 'default' && (
-                    <button onClick={() => handleDeleteMySQL(name)} className="text-red-600 hover:text-red-700 focus-visible-ring">
-                      删除
-                    </button>
-                  )}
-                </div>
-              </div>
-              {editingMySQL === name ? (
-                <DataSourceForm
-                  type="mysql"
-                  initialConfig={mysqlConfig}
-                  onSave={(cfg) => handleSaveMySQL(name, cfg as MySQLConfig)}
-                  onCancel={() => setEditingMySQL(null)}
-                />
-              ) : (
-                <div className="text-sm text-gray-600">
-                  <div>
-                    {mysqlConfig.host}:{mysqlConfig.port}
+            <Plus className="mr-2 h-4 w-4" /> 添加连接
+          </Button>
+        </CardHeader>
+        <CardContent className="space-y-4 pt-4">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {mysqlList.map(([name, mysqlConfig]) => (
+              <Card key={name} className="overflow-hidden">
+                {editingMySQL === name ? (
+                  <div className="p-4">
+                    <div className="flex justify-between items-center mb-4">
+                      <h4 className="font-medium">{name}</h4>
+                    </div>
+                    <DataSourceForm
+                      type="mysql"
+                      initialConfig={mysqlConfig}
+                      onSave={(cfg) => handleSaveMySQL(name, cfg as MySQLConfig)}
+                      onCancel={() => setEditingMySQL(null)}
+                    />
                   </div>
-                  <div>数据库: {mysqlConfig.database}</div>
-                  <div>用户: {mysqlConfig.user}</div>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
+                ) : (
+                  <>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-base font-medium">{name}</CardTitle>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setEditingMySQL(name)}
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </Button>
+                        {name !== 'default' && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDeleteMySQL(name)}
+                            className="text-destructive hover:text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-sm text-muted-foreground space-y-1">
+                        <div className="flex justify-between">
+                          <span>地址:</span>
+                          <span className="font-medium text-foreground">{mysqlConfig.host}:{mysqlConfig.port}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>数据库:</span>
+                          <span className="font-medium text-foreground">{mysqlConfig.database}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>用户:</span>
+                          <span className="font-medium text-foreground">{mysqlConfig.user}</span>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </>
+                )}
+              </Card>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Redis 连接 */}
-      <div className="bg-white rounded-lg shadow p-6 mb-6">
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-semibold">Redis 连接</h3>
-          <button
-            onClick={() => {
-              const name = prompt('请输入连接名称:')
-              if (name) setEditingRedis(name)
-            }}
-            className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 focus-visible-ring"
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <div className="space-y-1">
+            <CardTitle className="text-xl flex items-center gap-2">
+              <Server className="h-5 w-5" /> Redis 连接
+            </CardTitle>
+            <CardDescription>管理 Redis 数据库连接配置</CardDescription>
+          </div>
+          <Button
+            onClick={() => setIsAddRedisDialogOpen(true)}
+            size="sm"
           >
-            添加连接
-          </button>
-        </div>
-
-        <div className="space-y-4">
-          {redisList.map(([name, redisConfig]) => (
-            <div key={name} className="border border-gray-200 rounded-lg p-4">
-              <div className="flex justify-between items-center mb-2">
-                <h4 className="font-medium">{name}</h4>
-                <div className="space-x-2">
-                  <button onClick={() => setEditingRedis(name)} className="text-primary-600 hover:text-primary-700 focus-visible-ring">
-                    编辑
-                  </button>
-                  {name !== 'default' && (
-                    <button onClick={() => handleDeleteRedis(name)} className="text-red-600 hover:text-red-700 focus-visible-ring">
-                      删除
-                    </button>
-                  )}
-                </div>
-              </div>
-              {editingRedis === name ? (
-                <DataSourceForm
-                  type="redis"
-                  initialConfig={redisConfig}
-                  onSave={(cfg) => handleSaveRedis(name, cfg as RedisConfig)}
-                  onCancel={() => setEditingRedis(null)}
-                />
-              ) : (
-                <div className="text-sm text-gray-600">
-                  <div>{redisConfig.addr}</div>
-                  <div>模式: {redisConfig.mode || 'standalone'}</div>
-                  <div>DB: {redisConfig.db ?? 0}</div>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
+            <Plus className="mr-2 h-4 w-4" /> 添加连接
+          </Button>
+        </CardHeader>
+        <CardContent className="space-y-4 pt-4">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {redisList.map(([name, redisConfig]) => (
+              <Card key={name} className="overflow-hidden">
+                {editingRedis === name ? (
+                  <div className="p-4">
+                    <div className="flex justify-between items-center mb-4">
+                      <h4 className="font-medium">{name}</h4>
+                    </div>
+                    <DataSourceForm
+                      type="redis"
+                      initialConfig={redisConfig}
+                      onSave={(cfg) => handleSaveRedis(name, cfg as RedisConfig)}
+                      onCancel={() => setEditingRedis(null)}
+                    />
+                  </div>
+                ) : (
+                  <>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-base font-medium">{name}</CardTitle>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setEditingRedis(name)}
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </Button>
+                        {name !== 'default' && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDeleteRedis(name)}
+                            className="text-destructive hover:text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-sm text-muted-foreground space-y-1">
+                        <div className="flex justify-between">
+                          <span>地址:</span>
+                          <span className="font-medium text-foreground">{redisConfig.addr}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>模式:</span>
+                          <span className="font-medium text-foreground">{redisConfig.mode || 'standalone'}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>DB:</span>
+                          <span className="font-medium text-foreground">{redisConfig.db ?? 0}</span>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </>
+                )}
+              </Card>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* IoTDB 连接 */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-semibold">IoTDB 连接</h3>
-          {!editingIoTDB && (
-            <button
-              onClick={() => setEditingIoTDB(true)}
-              className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 focus-visible-ring"
-            >
-              编辑
-            </button>
-          )}
-        </div>
-
-        {editingIoTDB ? (
-          <DataSourceForm
-            type="iotdb"
-            initialConfig={config.iotdb}
-            onSave={(cfg) => handleSaveIoTDB(cfg as IoTDBConfig)}
-            onCancel={() => setEditingIoTDB(false)}
-          />
-        ) : (
-          <div className="text-sm text-gray-600">
-            <div>
-              {config.iotdb.host}:{config.iotdb.port}
-            </div>
-            <div>用户: {config.iotdb.user}</div>
-            <div>时区: {config.iotdb.zone_id}</div>
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <div className="space-y-1">
+            <CardTitle className="text-xl flex items-center gap-2">
+              <Database className="h-5 w-5" /> IoTDB 连接
+            </CardTitle>
+            <CardDescription>管理 IoTDB 时序数据库配置</CardDescription>
           </div>
-        )}
-      </div>
+          {!editingIoTDB && (
+            <Button
+              onClick={() => setEditingIoTDB(true)}
+              size="sm"
+              variant="outline"
+            >
+              <Edit2 className="mr-2 h-4 w-4" /> 编辑配置
+            </Button>
+          )}
+        </CardHeader>
+        <CardContent className="pt-4">
+          {editingIoTDB ? (
+            <div className="max-w-xl">
+              <DataSourceForm
+                type="iotdb"
+                initialConfig={config.iotdb}
+                onSave={(cfg) => handleSaveIoTDB(cfg as IoTDBConfig)}
+                onCancel={() => setEditingIoTDB(false)}
+              />
+            </div>
+          ) : (
+            <div className="text-sm text-muted-foreground space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="w-12">地址:</span>
+                <span className="font-medium text-foreground">{config.iotdb.host}:{config.iotdb.port}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-12">用户:</span>
+                <span className="font-medium text-foreground">{config.iotdb.user}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-12">时区:</span>
+                <span className="font-medium text-foreground">{config.iotdb.zone_id}</span>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+      <AddConnectionDialog
+        open={isAddMySQLDialogOpen}
+        onOpenChange={setIsAddMySQLDialogOpen}
+        onConfirm={(name) => {
+          setEditingMySQL(name)
+        }}
+        title="添加 MySQL 连接"
+        description="请输入新的 MySQL 连接名称，添加后可进行详细配置。"
+      />
+
+      <AddConnectionDialog
+        open={isAddRedisDialogOpen}
+        onOpenChange={setIsAddRedisDialogOpen}
+        onConfirm={(name) => {
+          setEditingRedis(name)
+        }}
+        title="添加 Redis 连接"
+        description="请输入新的 Redis 连接名称，添加后可进行详细配置。"
+      />
     </div>
   )
 }
