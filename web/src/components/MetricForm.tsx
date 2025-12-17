@@ -20,6 +20,16 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 interface MetricFormProps {
   metric: MetricSpec
@@ -32,6 +42,7 @@ export default function MetricForm({ metric: initialMetric, config, onSave, onCa
   const [metric, setMetric] = useState(initialMetric)
   const [previewing, setPreviewing] = useState(false)
   const [previewResult, setPreviewResult] = useState<{ success: boolean; value?: number; error?: string } | null>(null)
+  const [showSaveConfirm, setShowSaveConfirm] = useState(false)
 
   const metricTypeTips: Record<MetricSpec['type'], string> = {
     gauge: 'Gauge：表示某一时刻的数值快照，可上可下（例如温度、队列长度）。',
@@ -79,7 +90,12 @@ export default function MetricForm({ metric: initialMetric, config, onSave, onCa
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    setShowSaveConfirm(true)
+  }
+
+  const handleConfirmSave = () => {
     saveMutation.mutate()
+    setShowSaveConfirm(false)
   }
 
   const mysqlConnections = Object.keys(config.mysql_connections || {})
@@ -384,6 +400,42 @@ export default function MetricForm({ metric: initialMetric, config, onSave, onCa
           {saveMutation.isPending ? '保存中…' : '保存'}
         </Button>
       </div>
+      <AlertDialog open={showSaveConfirm} onOpenChange={setShowSaveConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认保存指标？</AlertDialogTitle>
+            <AlertDialogDescription>
+              <div className="mt-4 space-y-2 text-sm text-foreground bg-muted p-4 rounded-md">
+                <div className="grid grid-cols-[80px_1fr] gap-2">
+                  <span className="text-muted-foreground">名称:</span>
+                  <span className="font-medium">{metric.name}</span>
+
+                  <span className="text-muted-foreground">类型:</span>
+                  <span className="font-medium">{metric.type}</span>
+
+                  <span className="text-muted-foreground">数据源:</span>
+                  <span className="font-medium">
+                    {metric.source}
+                    {metric.connection && <span className="text-muted-foreground ml-1">({metric.connection})</span>}
+                  </span>
+
+                  <span className="text-muted-foreground">Help:</span>
+                  <span className="font-medium">{metric.help}</span>
+
+                  <span className="text-muted-foreground">查询:</span>
+                  <code className="font-mono text-xs break-all bg-background p-1 rounded border">
+                    {metric.query}
+                  </code>
+                </div>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmSave}>确认保存</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </form>
   )
 }
