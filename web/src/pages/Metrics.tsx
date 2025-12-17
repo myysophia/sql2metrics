@@ -35,10 +35,11 @@ export default function Metrics() {
   })
 
   const [editingMetric, setEditingMetric] = useState<MetricSpec | null>(null)
+  const [editingIndex, setEditingIndex] = useState<number | undefined>(undefined)
   const [isCreating, setIsCreating] = useState(false)
 
   const deleteMutation = useMutation({
-    mutationFn: (name: string) => api.deleteMetric(name),
+    mutationFn: (index: number) => api.deleteMetricByIndex(index),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['config'] })
     },
@@ -57,6 +58,7 @@ export default function Metrics() {
         <Button
           onClick={() => {
             setIsCreating(true)
+            setEditingIndex(undefined)
             setEditingMetric({
               name: '',
               help: '',
@@ -80,15 +82,18 @@ export default function Metrics() {
           <CardContent>
             <MetricForm
               metric={editingMetric!}
+              metricIndex={editingIndex}
               config={config}
               onSave={() => {
                 setEditingMetric(null)
+                setEditingIndex(undefined)
                 setIsCreating(false)
                 queryClient.invalidateQueries({ queryKey: ['config'] })
                 window.scrollTo({ top: 0, behavior: 'smooth' })
               }}
               onCancel={() => {
                 setEditingMetric(null)
+                setEditingIndex(undefined)
                 setIsCreating(false)
               }}
             />
@@ -108,8 +113,8 @@ export default function Metrics() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {config.metrics.map((metric) => (
-              <TableRow key={metric.name}>
+            {config.metrics.map((metric, index) => (
+              <TableRow key={`${metric.name}-${index}`}>
                 <TableCell className="font-medium">{metric.name}</TableCell>
                 <TableCell>{metric.type}</TableCell>
                 <TableCell>
@@ -124,6 +129,7 @@ export default function Metrics() {
                       size="icon"
                       onClick={() => {
                         setEditingMetric(metric)
+                        setEditingIndex(index)
                         setIsCreating(false)
                         window.scrollTo({ top: 0, behavior: 'smooth' })
                       }}
@@ -157,7 +163,7 @@ export default function Metrics() {
                         <AlertDialogFooter>
                           <AlertDialogCancel>取消</AlertDialogCancel>
                           <AlertDialogAction
-                            onClick={() => deleteMutation.mutate(metric.name)}
+                            onClick={() => deleteMutation.mutate(index)}
                             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                           >
                             删除

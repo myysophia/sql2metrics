@@ -45,6 +45,10 @@ func NewService(cfg *config.Config) (*Service, error) {
 		registry: prometheus.NewRegistry(),
 	}
 
+	// 注册 Go runtime 和进程指标的 collector
+	svc.registry.MustRegister(prometheus.NewGoCollector())
+	svc.registry.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
+
 	// 初始化 IoTDB 连接（失败时只记录警告，不阻止服务启动）
 	if needsSource(cfg.Metrics, "iotdb") {
 		iotdbClient, err := datasource.NewIoTDBClient(cfg.IoTDB)
@@ -176,12 +180,6 @@ func NewService(cfg *config.Config) (*Service, error) {
 	})
 	svc.registry.MustRegister(svc.errorCount, svc.lastRun)
 
-	// 同时注册到默认注册表以保持兼容性
-	prometheus.MustRegister(svc.errorCount, svc.lastRun)
-	for _, holder := range svc.metrics {
-		prometheus.MustRegister(holder.gauge)
-	}
-
 	return svc, nil
 }
 
@@ -246,9 +244,15 @@ func (s *Service) Run(ctx context.Context) {
 }
 
 func (s *Service) execute(ctx context.Context) {
-	log.Printf("开始执行采集周期，共 %d 个指标", len(s.metrics))
+	// 获取锁并复制 metrics 切片，防止与 ReloadConfig 竞争
+	s.mu.RLock()
+	metrics := make([]metricHolder, len(s.metrics))
+	copy(metrics, s.metrics)
+	s.mu.RUnlock()
+
+	log.Printf("开始执行采集周期，共 %d 个指标", len(metrics))
 	var success bool
-	for _, holder := range s.metrics {
+	for _, holder := range metrics {
 		start := time.Now()
 		log.Printf("开始更新指标 %s (source=%s)", holder.spec.Name, holder.spec.Source)
 		value, err := s.queryMetric(ctx, holder.spec)
@@ -350,8 +354,11 @@ func (s *Service) GetRegistry() *prometheus.Registry {
 }
 
 // GetPrometheusHandler 返回 Prometheus HTTP handler。
+// 使用自定义注册表 s.registry，确保热更新的指标能够正确暴露。
 func (s *Service) GetPrometheusHandler() http.Handler {
-	return promhttp.Handler()
+	return promhttp.HandlerFor(s.registry, promhttp.HandlerOpts{
+		EnableOpenMetrics: true,
+	})
 }
 
 // ReloadResult 热更新结果。
@@ -618,6 +625,19 @@ func (s *Service) ReloadConfig(newCfg *config.Config) ReloadResult {
 	log.Printf("热更新完成: 注册了 %d 个新指标, 总计 %d 个指标", len(newMetrics), len(s.metrics))
 	if len(newMetrics) > 0 {
 		log.Printf("新注册指标: %v", newMetrics)
+	}
+
+	// 热更新成功后立即同步执行一次采集，确保新指标有数据
+	// 注意：必须在持有锁的状态下同步执行，否则会有竞争条件
+	log.Printf("热更新后立即执行采集，共 %d 个指标", len(s.metrics))
+	for _, holder := range s.metrics {
+		value, err := s.queryMetric(context.Background(), holder.spec)
+		if err != nil {
+			log.Printf("热更新采集指标 %s 失败: %v", holder.spec.Name, err)
+			continue
+		}
+		holder.gauge.Set(value)
+		log.Printf("热更新采集指标 %s 成功，值=%.3f", holder.spec.Name, value)
 	}
 
 	return ReloadResult{

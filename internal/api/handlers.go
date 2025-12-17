@@ -460,3 +460,89 @@ func (s *Server) handleDeleteMetric(w http.ResponseWriter, r *http.Request) {
 	s.setConfig(cfg)
 	s.writeJSON(w, http.StatusOK, map[string]string{"message": "指标已删除"})
 }
+
+// handleDeleteMetricByIndex 按索引删除指标。
+func (s *Server) handleDeleteMetricByIndex(w http.ResponseWriter, r *http.Request) {
+	indexStr := strings.TrimPrefix(r.URL.Path, "/api/metrics/index/")
+	indexStr = strings.TrimSuffix(indexStr, "/")
+	
+	var index int
+	if _, err := fmt.Sscanf(indexStr, "%d", &index); err != nil {
+		s.writeError(w, http.StatusBadRequest, "无效的索引")
+		return
+	}
+
+	cfg := s.getConfig()
+	if index < 0 || index >= len(cfg.Metrics) {
+		s.writeError(w, http.StatusNotFound, "指标索引超出范围")
+		return
+	}
+
+	// 按索引删除指标
+	cfg.Metrics = append(cfg.Metrics[:index], cfg.Metrics[index+1:]...)
+
+	if err := cfg.Validate(); err != nil {
+		s.writeError(w, http.StatusBadRequest, fmt.Sprintf("配置验证失败: %v", err))
+		return
+	}
+
+	if err := cfg.Save(s.configPath); err != nil {
+		s.writeError(w, http.StatusInternalServerError, fmt.Sprintf("保存配置失败: %v", err))
+		return
+	}
+
+	reloadResult := s.service.ReloadConfig(cfg)
+	if !reloadResult.Success {
+		s.writeError(w, http.StatusInternalServerError, fmt.Sprintf("热更新失败: %s", reloadResult.Error))
+		return
+	}
+
+	s.setConfig(cfg)
+	s.writeJSON(w, http.StatusOK, map[string]string{"message": "指标已删除"})
+}
+
+// handleUpdateMetricByIndex 按索引更新指标。
+func (s *Server) handleUpdateMetricByIndex(w http.ResponseWriter, r *http.Request) {
+	indexStr := strings.TrimPrefix(r.URL.Path, "/api/metrics/index/")
+	indexStr = strings.TrimSuffix(indexStr, "/")
+	
+	var index int
+	if _, err := fmt.Sscanf(indexStr, "%d", &index); err != nil {
+		s.writeError(w, http.StatusBadRequest, "无效的索引")
+		return
+	}
+
+	var metric config.MetricSpec
+	if err := json.NewDecoder(r.Body).Decode(&metric); err != nil {
+		s.writeError(w, http.StatusBadRequest, fmt.Sprintf("解析指标配置失败: %v", err))
+		return
+	}
+
+	cfg := s.getConfig()
+	if index < 0 || index >= len(cfg.Metrics) {
+		s.writeError(w, http.StatusNotFound, "指标索引超出范围")
+		return
+	}
+
+	// 按索引更新指标
+	cfg.Metrics[index] = metric
+
+	if err := cfg.Validate(); err != nil {
+		s.writeError(w, http.StatusBadRequest, fmt.Sprintf("配置验证失败: %v", err))
+		return
+	}
+
+	if err := cfg.Save(s.configPath); err != nil {
+		s.writeError(w, http.StatusInternalServerError, fmt.Sprintf("保存配置失败: %v", err))
+		return
+	}
+
+	reloadResult := s.service.ReloadConfig(cfg)
+	if !reloadResult.Success {
+		s.writeError(w, http.StatusInternalServerError, fmt.Sprintf("热更新失败: %s", reloadResult.Error))
+		return
+	}
+
+	s.setConfig(cfg)
+	s.writeJSON(w, http.StatusOK, metric)
+}

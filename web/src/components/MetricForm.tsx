@@ -34,12 +34,13 @@ import { useToast } from "@/hooks/use-toast"
 
 interface MetricFormProps {
   metric: MetricSpec
+  metricIndex?: number  // 编辑时的索引，用于精确更新
   config: Config
   onSave: () => void
   onCancel: () => void
 }
 
-export default function MetricForm({ metric: initialMetric, config, onSave, onCancel }: MetricFormProps) {
+export default function MetricForm({ metric: initialMetric, metricIndex, config, onSave, onCancel }: MetricFormProps) {
   const [metric, setMetric] = useState(initialMetric)
   const [previewing, setPreviewing] = useState(false)
   const [previewResult, setPreviewResult] = useState<{ success: boolean; value?: number; error?: string } | null>(null)
@@ -80,8 +81,9 @@ export default function MetricForm({ metric: initialMetric, config, onSave, onCa
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      if (initialMetric.name && initialMetric.name === metric.name) {
-        return api.updateMetric(metric.name, metric)
+      // 如果有索引，使用索引更新；否则创建新指标
+      if (metricIndex !== undefined) {
+        return api.updateMetricByIndex(metricIndex, metric)
       }
       return api.createMetric(metric)
     },

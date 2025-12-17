@@ -83,8 +83,19 @@ export const api = {
       body: JSON.stringify(metric),
     }),
 
+  updateMetricByIndex: (index: number, metric: MetricSpec) =>
+    request<MetricSpec>(`/metrics/index/${index}`, {
+      method: 'PUT',
+      body: JSON.stringify(metric),
+    }),
+
   deleteMetric: (name: string) =>
     request<{ message: string }>(`/metrics/${encodeURIComponent(name)}`, {
+      method: 'DELETE',
+    }),
+
+  deleteMetricByIndex: (index: number) =>
+    request<{ message: string }>(`/metrics/index/${index}`, {
       method: 'DELETE',
     }),
 }

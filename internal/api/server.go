@@ -71,6 +71,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.handleListMetrics(w, r)
 	case path == "/api/metrics" && r.Method == "POST":
 		s.handleCreateMetric(w, r)
+	case strings.HasPrefix(path, "/api/metrics/index/") && r.Method == "DELETE":
+		s.handleDeleteMetricByIndex(w, r)
+	case strings.HasPrefix(path, "/api/metrics/index/") && r.Method == "PUT":
+		s.handleUpdateMetricByIndex(w, r)
 	case strings.HasPrefix(path, "/api/metrics/") && r.Method == "GET":
 		s.handleGetMetric(w, r)
 	case strings.HasPrefix(path, "/api/metrics/") && r.Method == "PUT":
