@@ -12,7 +12,7 @@ function App() {
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/datasources" element={<DataSources />} />
-        <Route path="/metrics" element={<Metrics />} />
+        <Route path="/config/metrics" element={<Metrics />} />
         <Route path="/settings" element={<Settings />} />
       </Routes>
     </Layout>

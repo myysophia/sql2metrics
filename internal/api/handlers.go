@@ -345,7 +345,8 @@ func (s *Server) handleCreateMetric(w http.ResponseWriter, r *http.Request) {
 			m.Source == metric.Source &&
 			m.Connection == metric.Connection &&
 			m.Query == metric.Query {
-			s.writeError(w, http.StatusConflict, "指标已存在")
+			// 幂等性支持：如果完全一致，返回 200 OK
+			s.writeJSON(w, http.StatusOK, m)
 			return
 		}
 	}

@@ -11,7 +11,7 @@ interface LayoutProps {
 const navItems = [
   { path: '/dashboard', label: '概览', icon: LayoutDashboard },
   { path: '/datasources', label: '数据源', icon: Database },
-  { path: '/metrics', label: '指标', icon: LineChart },
+  { path: '/config/metrics', label: '指标', icon: LineChart },
   { path: '/settings', label: '设置', icon: Settings },
 ]
 
