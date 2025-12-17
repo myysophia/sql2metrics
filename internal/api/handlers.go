@@ -340,7 +340,11 @@ func (s *Server) handleCreateMetric(w http.ResponseWriter, r *http.Request) {
 
 	cfg := s.getConfig()
 	for _, m := range cfg.Metrics {
-		if m.Name == metric.Name {
+		if m.Name == metric.Name &&
+			m.Help == metric.Help &&
+			m.Source == metric.Source &&
+			m.Connection == metric.Connection &&
+			m.Query == metric.Query {
 			s.writeError(w, http.StatusConflict, "指标已存在")
 			return
 		}
