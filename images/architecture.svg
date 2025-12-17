@@ -1,0 +1,196 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 550" role="img" aria-labelledby="sql2metrics-title">
+  <title id="sql2metrics-title">SQL2Metrics Architecture - Database Query to Prometheus Metrics</title>
+
+  <!-- CSS Animations -->
+  <style>
+    .flow-line {
+      stroke-dasharray: 8,4;
+      animation: flow 1.5s linear infinite;
+    }
+
+    @keyframes flow {
+      to { stroke-dashoffset: -24; }
+    }
+
+    .pulse-center {
+      transform-origin: 450px 275px;
+      animation: pulse 2.5s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 0.9; transform: scale(1); }
+      50% { opacity: 1; transform: scale(1.05); }
+    }
+
+    .rotate-slow {
+      transform-origin: 450px 275px;
+      animation: rotate-slow 20s linear infinite;
+    }
+
+    @keyframes rotate-slow {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    .fade-in {
+      animation: fade-in 2s ease-out;
+    }
+
+    @keyframes fade-in {
+      from { opacity: 0; transform: translateY(15px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .glow-blue {
+      filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.6));
+      animation: glow-blue-pulse 2.5s ease-in-out infinite;
+    }
+
+    @keyframes glow-blue-pulse {
+      0%, 100% { filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.6)); }
+      50% { filter: drop-shadow(0 0 16px rgba(59, 130, 246, 0.9)); }
+    }
+
+    .glow-green {
+      filter: drop-shadow(0 0 6px rgba(34, 197, 94, 0.7));
+    }
+
+    .glow-orange {
+      filter: drop-shadow(0 0 6px rgba(249, 115, 22, 0.7));
+    }
+
+    .data-flow {
+      stroke-dasharray: 10,5;
+      animation: data-flow 2s linear infinite;
+    }
+
+    @keyframes data-flow {
+      to { stroke-dashoffset: -30; }
+    }
+  </style>
+
+  <!-- Background -->
+  <defs>
+    <linearGradient id="bg-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f8fafc"/>
+      <stop offset="100%" style="stop-color:#f1f5f9"/>
+    </linearGradient>
+  </defs>
+  <rect width="900" height="550" fill="url(#bg-gradient)" stroke="#cbd5e1" stroke-width="2" rx="12"/>
+
+  <!-- Title -->
+  <text x="450" y="40" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="24" font-weight="700" fill="#1e293b">
+    SQL2Metrics Architecture
+  </text>
+  <text x="450" y="62" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="14" fill="#64748b">
+    Database Query → Prometheus Metrics Pipeline
+  </text>
+
+  <!-- Left: Data Sources -->
+  <g class="fade-in">
+    <text x="120" y="120" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="16" font-weight="600" fill="#475569">Data Sources</text>
+
+    <!-- MySQL -->
+    <rect x="40" y="140" width="160" height="50" rx="10" fill="#3b82f6" fill-opacity="0.15" stroke="#3b82f6" stroke-width="2"/>
+    <text x="120" y="170" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="600" fill="#2563eb">🗄️ MySQL</text>
+
+    <!-- Redis -->
+    <rect x="40" y="210" width="160" height="50" rx="10" fill="#ef4444" fill-opacity="0.15" stroke="#ef4444" stroke-width="2"/>
+    <text x="120" y="240" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="600" fill="#dc2626">📦 Redis</text>
+
+    <!-- IoTDB -->
+    <rect x="40" y="280" width="160" height="50" rx="10" fill="#22c55e" fill-opacity="0.15" stroke="#22c55e" stroke-width="2"/>
+    <text x="120" y="310" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="600" fill="#16a34a">📊 IoTDB</text>
+
+    <!-- Connection Pool Label -->
+    <text x="120" y="360" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="11" fill="#94a3b8">Connection Pool</text>
+  </g>
+
+  <!-- Data Flow Lines: Sources to Core -->
+  <g>
+    <path d="M200 165 Q280 165 320 235" fill="none" stroke="#3b82f6" stroke-width="2" class="data-flow"/>
+    <path d="M200 235 Q280 235 320 260" fill="none" stroke="#ef4444" stroke-width="2" class="data-flow"/>
+    <path d="M200 305 Q280 305 320 285" fill="none" stroke="#22c55e" stroke-width="2" class="data-flow"/>
+  </g>
+
+  <!-- Center: SQL2Metrics Core -->
+  <g class="pulse-center">
+    <!-- Outer ring -->
+    <circle cx="450" cy="260" r="110" fill="#8b5cf6" fill-opacity="0.08" stroke="#8b5cf6" stroke-width="2" class="glow-blue"/>
+    <circle cx="450" cy="260" r="80" fill="none" stroke="#8b5cf6" stroke-width="1.5" stroke-dasharray="12,6" class="rotate-slow"/>
+
+    <!-- Core text (no box) -->
+    <text x="450" y="245" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="18" font-weight="700" fill="#7c3aed">SQL2Metrics</text>
+    <text x="450" y="265" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="12" fill="#6b7280">Go Collector Engine</text>
+    
+    <!-- Features -->
+    <text x="450" y="285" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="10" fill="#8b5cf6">Concurrent • Hot Reload • YAML</text>
+  </g>
+
+  <!-- Right: Prometheus Output -->
+  <g class="fade-in">
+    <text x="780" y="120" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="16" font-weight="600" fill="#475569">Metrics Output</text>
+
+    <!-- Prometheus Endpoint -->
+    <rect x="700" y="200" width="160" height="70" rx="12" fill="#f97316" fill-opacity="0.15" stroke="#f97316" stroke-width="2" class="glow-orange"/>
+    <text x="780" y="235" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="600" fill="#ea580c">🔥 Prometheus</text>
+    <text x="780" y="255" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="11" fill="#9a3412">/metrics endpoint</text>
+
+    <!-- Grafana -->
+    <rect x="700" y="290" width="160" height="50" rx="10" fill="#06b6d4" fill-opacity="0.15" stroke="#06b6d4" stroke-width="2"/>
+    <text x="780" y="320" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="600" fill="#0891b2">📈 Grafana</text>
+
+    <!-- Alerting -->
+    <rect x="700" y="360" width="160" height="50" rx="10" fill="#eab308" fill-opacity="0.15" stroke="#eab308" stroke-width="2"/>
+    <text x="780" y="390" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="600" fill="#ca8a04">🚨 Alerting</text>
+  </g>
+
+  <!-- Data Flow Lines: Core to Output -->
+  <g>
+    <path d="M560 235 Q620 235 700 235" fill="none" stroke="#f97316" stroke-width="2" class="data-flow"/>
+    <path d="M560 260 Q620 280 700 315" fill="none" stroke="#06b6d4" stroke-width="2" class="data-flow"/>
+    <path d="M560 285 Q620 340 700 385" fill="none" stroke="#eab308" stroke-width="2" class="data-flow"/>
+  </g>
+
+  <!-- Bottom: Web UI & Config -->
+  <g class="fade-in">
+    <text x="450" y="430" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="16" font-weight="600" fill="#475569">Management Layer</text>
+
+    <!-- Web UI -->
+    <rect x="250" y="450" width="150" height="55" rx="10" fill="#ec4899" fill-opacity="0.15" stroke="#ec4899" stroke-width="2"/>
+    <text x="325" y="478" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="600" fill="#db2777">🌐 Web UI</text>
+    <text x="325" y="493" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="10" fill="#be185d">React + Shadcn</text>
+
+    <!-- YAML Config -->
+    <rect x="420" y="450" width="150" height="55" rx="10" fill="#10b981" fill-opacity="0.15" stroke="#10b981" stroke-width="2"/>
+    <text x="495" y="478" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="600" fill="#059669">📝 YAML Config</text>
+    <text x="495" y="493" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="10" fill="#047857">Hot Reload</text>
+
+    <!-- REST API -->
+    <rect x="590" y="450" width="150" height="55" rx="10" fill="#6366f1" fill-opacity="0.15" stroke="#6366f1" stroke-width="2"/>
+    <text x="665" y="478" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="600" fill="#4f46e5">⚡ REST API</text>
+    <text x="665" y="493" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="10" fill="#4338ca">Config Management</text>
+  </g>
+
+  <!-- Vertical Flow Lines: Management to Core -->
+  <g>
+    <path d="M325 450 Q325 400 400 330" fill="none" stroke="#ec4899" stroke-width="1.5" stroke-dasharray="5,3"/>
+    <path d="M495 450 Q495 400 470 330" fill="none" stroke="#10b981" stroke-width="1.5" stroke-dasharray="5,3"/>
+    <path d="M665 450 Q665 400 540 330" fill="none" stroke="#6366f1" stroke-width="1.5" stroke-dasharray="5,3"/>
+  </g>
+
+  <!-- Metric Types Legend -->
+  <g transform="translate(40, 420)">
+    <text x="0" y="0" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="600" fill="#475569">Metric Types:</text>
+    <rect x="0" y="10" width="60" height="22" rx="4" fill="#8b5cf6" fill-opacity="0.2"/>
+    <text x="30" y="25" text-anchor="middle" font-family="monospace" font-size="10" fill="#7c3aed">Gauge</text>
+    <rect x="70" y="10" width="60" height="22" rx="4" fill="#3b82f6" fill-opacity="0.2"/>
+    <text x="100" y="25" text-anchor="middle" font-family="monospace" font-size="10" fill="#2563eb">Counter</text>
+    <rect x="0" y="38" width="60" height="22" rx="4" fill="#22c55e" fill-opacity="0.2"/>
+    <text x="30" y="53" text-anchor="middle" font-family="monospace" font-size="10" fill="#16a34a">Histogram</text>
+    <rect x="70" y="38" width="60" height="22" rx="4" fill="#f97316" fill-opacity="0.2"/>
+    <text x="100" y="53" text-anchor="middle" font-family="monospace" font-size="10" fill="#ea580c">Summary</text>
+  </g>
+
+</svg>
