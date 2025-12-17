@@ -2,7 +2,7 @@ name: Build Linux Binary
 
 on:
   push:
-    branches: [ "main" ]
+    # branches: [ "main" ]
     tags:
       - "v*"
   pull_request:
