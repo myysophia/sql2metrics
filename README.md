@@ -1,35 +1,11 @@
 # sql2metrics
 
 ## 项目简介
-	sql2metrics 是一个以配置驱动的 Prometheus 指标采集器，能够定时执行数据库查询（当前支持 MySQL、Redis 与 IoTDB），并将结果转换为 Prometheus Metrics 暴露在 `/metrics` 端点。适用于快速将现有业务 SQL 转换为可监控的时间序列，用于观察趋势、告警与容量分析。
+sql2metrics 是一个以配置驱动的 Prometheus 指标采集器，能够定时执行数据库查询（当前支持MySQL、Redis 与 IoTDB），并将结果转换为 Prometheus Metrics 暴露在 `/metrics` 端点。适用于快速将现有业务 SQL 转换为可监控的时间序列，用于观察趋势、告警与容量分析。
 
 ## 架构图
 
 ![SQL2Metrics Architecture](./images/architecture.svg)
-
-<img width="2414" height="1444" alt="sql2metricdiagram-2025-12-12-095019" src="https://github.com/user-attachments/assets/f472d880-290a-455d-a37d-30da341cee73" />
-
-
-<img width="1305" height="623" alt="image" src="https://github.com/user-attachments/assets/02b7fdac-62c2-443b-9bbf-97f4f328aa04" />
-
-<img width="1349" height="556" alt="image" src="https://github.com/user-attachments/assets/1bf4a2e1-442b-46a3-a3d5-9ae735efbfc4" />
-
-
-<img width="1126" height="641" alt="image" src="https://github.com/user-attachments/assets/9267ce34-945f-4614-8c06-003eb021edea" />
-
-<img width="1413" height="526" alt="image" src="https://github.com/user-attachments/assets/1a5ee7cf-2491-4578-b3f2-c3428857f416" />
-
-
-前端UI配置
-
-<img width="1251" height="442" alt="image" src="https://github.com/user-attachments/assets/d4fbe8c6-3a61-445e-9259-0f5eb1893187" />
-
-<img width="1238" height="711" alt="image" src="https://github.com/user-attachments/assets/abb0e5c4-0204-456c-8dd9-0a224efc5603" />
-
-<img width="1263" height="587" alt="image" src="https://github.com/user-attachments/assets/3c40f7c0-c908-4b29-ac33-9acbc7e8058b" />
-
-<img width="1272" height="529" alt="image" src="https://github.com/user-attachments/assets/a4f94685-0473-48cb-ad25-afe761766f32" />
-
 
 ## 核心特性
 - **配置驱动**：全部指标、SQL、连接信息通过 YAML 描述，新增监控无需改动代码。
