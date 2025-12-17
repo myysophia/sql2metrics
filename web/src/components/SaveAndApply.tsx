@@ -32,13 +32,8 @@ export default function SaveAndApply() {
       setShowSuccess(true)
       queryClient.invalidateQueries({ queryKey: ['config'] })
 
-      // 获取 metrics URL 并打开浏览器
-      try {
-        const { url } = await api.getMetricsURL()
-        window.open(url, '_blank', 'noopener,noreferrer')
-      } catch (error) {
-        console.error('获取 metrics URL 失败:', error)
-      }
+      // 打开 metrics 页面 (使用相对路径，自动适配当前 IP/域名)
+      window.open('/metrics', '_blank', 'noopener,noreferrer')
 
       // 3秒后隐藏成功提示
       setTimeout(() => setShowSuccess(false), 3000)
