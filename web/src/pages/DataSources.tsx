@@ -14,6 +14,18 @@ import {
 import { Plus, Edit2, Trash2, Database, Server } from 'lucide-react'
 import { AddConnectionDialog } from '@/components/AddConnectionDialog'
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
+
 export default function DataSources() {
   const queryClient = useQueryClient()
   const { data: config, isLoading } = useQuery({
@@ -76,7 +88,6 @@ export default function DataSources() {
   }
 
   const handleDeleteMySQL = (name: string) => {
-    if (!confirm(`确定要删除 MySQL 连接 "${name}" 吗？`)) return
 
     const newConnections = { ...mysqlConnections }
     delete newConnections[name]
@@ -88,7 +99,6 @@ export default function DataSources() {
   }
 
   const handleDeleteRedis = (name: string) => {
-    if (!confirm(`确定要删除 Redis 连接 "${name}" 吗？`)) return
 
     const newConnections = { ...redisConnections }
     delete newConnections[name]
@@ -165,14 +175,34 @@ export default function DataSources() {
                           <Edit2 className="h-4 w-4" />
                         </Button>
                         {name !== 'default' && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleDeleteMySQL(name)}
-                            className="text-destructive hover:text-destructive"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="text-destructive hover:text-destructive"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>确定要删除 MySQL 连接 "{name}" 吗？</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  此操作不可撤销。这将永久删除该连接配置，可能会影响使用此连接的指标。
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>取消</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() => handleDeleteMySQL(name)}
+                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                >
+                                  删除
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
                         )}
                       </div>
                     </CardHeader>
@@ -245,14 +275,34 @@ export default function DataSources() {
                           <Edit2 className="h-4 w-4" />
                         </Button>
                         {name !== 'default' && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleDeleteRedis(name)}
-                            className="text-destructive hover:text-destructive"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="text-destructive hover:text-destructive"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>确定要删除 Redis 连接 "{name}" 吗？</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  此操作不可撤销。这将永久删除该连接配置，可能会影响使用此连接的指标。
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>取消</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() => handleDeleteRedis(name)}
+                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                >
+                                  删除
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
                         )}
                       </div>
                     </CardHeader>

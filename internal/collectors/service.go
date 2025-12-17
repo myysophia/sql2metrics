@@ -87,8 +87,18 @@ func NewService(cfg *config.Config) (*Service, error) {
 
 	// 记录已注册的指标 Help 信息，确保同名指标 Help 一致
 	metricHelp := make(map[string]string)
+	// 记录已注册的指标唯一标识 (Name + Labels)，避免重复注册导致 panic
+	registeredMetrics := make(map[string]bool)
 
 	for _, spec := range cfg.Metrics {
+		// 生成唯一标识 key
+		labelKey := spec.Name + labelMapToString(spec.Labels)
+		if registeredMetrics[labelKey] {
+			log.Printf("警告: 指标 %s (Labels: %v) 已注册，跳过重复定义", spec.Name, spec.Labels)
+			continue
+		}
+		registeredMetrics[labelKey] = true
+
 		// 规范化 Help 字符串
 		if help, exists := metricHelp[spec.Name]; exists {
 			if spec.Help != help {
@@ -503,13 +513,28 @@ func (s *Service) ReloadConfig(newCfg *config.Config) ReloadResult {
 		}
 	}
 
-	var newMetrics []string
-	var updatedMetrics []metricHolder
-
+	// 先注销所有旧指标
+	for _, holder := range s.metrics {
+		s.registry.Unregister(holder.gauge)
+	}
+	s.metrics = make([]metricHolder, 0)
+	
 	// 记录已注册的指标 Help 信息，确保同名指标 Help 一致
 	metricHelp := make(map[string]string)
+	// 记录已注册的指标唯一标识
+	registeredMetrics := make(map[string]bool)
+
+	// 用于存储新的指标列表
+	var updatedMetrics []metricHolder
+	var newMetrics []string
 
 	for _, spec := range newCfg.Metrics {
+		labelKey := spec.Name + labelMapToString(spec.Labels)
+		if registeredMetrics[labelKey] {
+			continue
+		}
+		registeredMetrics[labelKey] = true
+
 		// 规范化 Help 字符串
 		if help, exists := metricHelp[spec.Name]; exists {
 			spec.Help = help
@@ -522,75 +547,61 @@ func (s *Service) ReloadConfig(newCfg *config.Config) ReloadResult {
 			metricType = "gauge"
 		}
 
-		var existingHolder *metricHolder
-		for i, holder := range s.metrics {
-			if holder.spec.Name == spec.Name && labelsEqual(holder.spec.Labels, spec.Labels) {
-				existingHolder = &s.metrics[i]
-				break
+		// 新增指标
+		var metric prometheus.Collector
+		switch metricType {
+		case "gauge":
+			metric = prometheus.NewGauge(prometheus.GaugeOpts{
+				Name:        spec.Name,
+				Help:        spec.Help,
+				ConstLabels: spec.Labels,
+			})
+		case "counter":
+			metric = prometheus.NewCounter(prometheus.CounterOpts{
+				Name:        spec.Name,
+				Help:        spec.Help,
+				ConstLabels: spec.Labels,
+			})
+		case "histogram":
+			buckets := spec.Buckets
+			if len(buckets) == 0 {
+				buckets = prometheus.DefBuckets
+			}
+			metric = prometheus.NewHistogram(prometheus.HistogramOpts{
+				Name:        spec.Name,
+				Help:        spec.Help,
+				ConstLabels: spec.Labels,
+				Buckets:     buckets,
+			})
+		case "summary":
+			objectives := spec.Objectives
+			if len(objectives) == 0 {
+				objectives = map[float64]float64{0.5: 0.05, 0.9: 0.01, 0.99: 0.001}
+			}
+			metric = prometheus.NewSummary(prometheus.SummaryOpts{
+				Name:        spec.Name,
+				Help:        spec.Help,
+				ConstLabels: spec.Labels,
+				Objectives:  objectives,
+			})
+		}
+
+		if err := s.registry.Register(metric); err != nil {
+			return ReloadResult{
+				Success: false,
+				Error:   fmt.Sprintf("注册指标 %s 失败: %v", spec.Name, err),
+				Message: "热更新失败",
 			}
 		}
 
-		if existingHolder != nil {
-			// 如果已存在，更新 spec (主要是 Query 等可能变化的字段，Help 已强制一致)
-			existingHolder.spec = spec
-			updatedMetrics = append(updatedMetrics, *existingHolder)
-		} else {
-			// 新增指标
-			var metric prometheus.Collector
-			switch metricType {
-			case "gauge":
-				metric = prometheus.NewGauge(prometheus.GaugeOpts{
-					Name:        spec.Name,
-					Help:        spec.Help,
-					ConstLabels: spec.Labels,
-				})
-			case "counter":
-				metric = prometheus.NewCounter(prometheus.CounterOpts{
-					Name:        spec.Name,
-					Help:        spec.Help,
-					ConstLabels: spec.Labels,
-				})
-			case "histogram":
-				buckets := spec.Buckets
-				if len(buckets) == 0 {
-					buckets = prometheus.DefBuckets
-				}
-				metric = prometheus.NewHistogram(prometheus.HistogramOpts{
-					Name:        spec.Name,
-					Help:        spec.Help,
-					ConstLabels: spec.Labels,
-					Buckets:     buckets,
-				})
-			case "summary":
-				objectives := spec.Objectives
-				if len(objectives) == 0 {
-					objectives = map[float64]float64{0.5: 0.05, 0.9: 0.01, 0.99: 0.001}
-				}
-				metric = prometheus.NewSummary(prometheus.SummaryOpts{
-					Name:        spec.Name,
-					Help:        spec.Help,
-					ConstLabels: spec.Labels,
-					Objectives:  objectives,
-				})
+		if gauge, ok := metric.(prometheus.Gauge); ok {
+			holder := metricHolder{
+				spec:  spec,
+				gauge: gauge,
 			}
-
-			if err := s.registry.Register(metric); err != nil {
-				return ReloadResult{
-					Success: false,
-					Error:   fmt.Sprintf("注册指标 %s 失败: %v", spec.Name, err),
-					Message: "热更新失败",
-				}
-			}
-
-			if gauge, ok := metric.(prometheus.Gauge); ok {
-				holder := metricHolder{
-					spec:  spec,
-					gauge: gauge,
-				}
-				updatedMetrics = append(updatedMetrics, holder)
-				prometheus.MustRegister(gauge)
-				newMetrics = append(newMetrics, spec.Name)
-			}
+			updatedMetrics = append(updatedMetrics, holder)
+			// 注意：prometheus.MustRegister(gauge) 这里不应该调用 global register，因为我们用的是 s.registry
+			newMetrics = append(newMetrics, spec.Name)
 		}
 	}
 
@@ -602,9 +613,16 @@ func (s *Service) ReloadConfig(newCfg *config.Config) ReloadResult {
 		metricNames = append(metricNames, m)
 	}
 
+	s.metrics = updatedMetrics
+
+	log.Printf("热更新完成: 注册了 %d 个新指标, 总计 %d 个指标", len(newMetrics), len(s.metrics))
+	if len(newMetrics) > 0 {
+		log.Printf("新注册指标: %v", newMetrics)
+	}
+
 	return ReloadResult{
 		Success: true,
-		Message: "配置热更新成功",
+		Message: fmt.Sprintf("热更新成功 (新增 %d 个指标)", len(newMetrics)),
 		Metrics: metricNames,
 		Removed: removed,
 	}

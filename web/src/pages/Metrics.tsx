@@ -85,6 +85,7 @@ export default function Metrics() {
                 setEditingMetric(null)
                 setIsCreating(false)
                 queryClient.invalidateQueries({ queryKey: ['config'] })
+                window.scrollTo({ top: 0, behavior: 'smooth' })
               }}
               onCancel={() => {
                 setEditingMetric(null)

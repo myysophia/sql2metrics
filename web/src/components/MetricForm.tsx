@@ -30,6 +30,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { useToast } from "@/hooks/use-toast"
 
 interface MetricFormProps {
   metric: MetricSpec
@@ -75,6 +76,8 @@ export default function MetricForm({ metric: initialMetric, config, onSave, onCa
     },
   })
 
+  const { toast } = useToast()
+
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (initialMetric.name && initialMetric.name === metric.name) {
@@ -84,8 +87,20 @@ export default function MetricForm({ metric: initialMetric, config, onSave, onCa
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['config'] })
+      toast({
+        title: "保存成功",
+        description: `指标 ${metric.name} 已成功保存`,
+      })
       onSave()
     },
+    onError: (error: Error) => {
+      toast({
+        variant: "destructive",
+        title: "保存失败",
+        description: error.message || "未知错误，请检查网络或后端日志",
+      })
+      setShowSaveConfirm(false)
+    }
   })
 
   const handleSubmit = (e: React.FormEvent) => {
