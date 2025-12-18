@@ -25,6 +25,12 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 
 export default function DataSources() {
   const queryClient = useQueryClient()
@@ -208,9 +214,20 @@ export default function DataSources() {
                     </CardHeader>
                     <CardContent>
                       <div className="text-sm text-muted-foreground space-y-1">
-                        <div className="flex justify-between">
-                          <span>地址:</span>
-                          <span className="font-medium text-foreground">{mysqlConfig.host}:{mysqlConfig.port}</span>
+                        <div className="flex justify-between items-center overflow-hidden">
+                          <span className="shrink-0 mr-2">地址:</span>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="font-medium text-foreground truncate cursor-help">
+                                  {mysqlConfig.host}:{mysqlConfig.port}
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>{mysqlConfig.host}:{mysqlConfig.port}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                         </div>
                         <div className="flex justify-between">
                           <span>数据库:</span>
@@ -308,9 +325,20 @@ export default function DataSources() {
                     </CardHeader>
                     <CardContent>
                       <div className="text-sm text-muted-foreground space-y-1">
-                        <div className="flex justify-between">
-                          <span>地址:</span>
-                          <span className="font-medium text-foreground">{redisConfig.addr}</span>
+                        <div className="flex justify-between items-center overflow-hidden">
+                          <span className="shrink-0 mr-2">地址:</span>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="font-medium text-foreground truncate cursor-help">
+                                  {redisConfig.addr}
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>{redisConfig.addr}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                         </div>
                         <div className="flex justify-between">
                           <span>模式:</span>
@@ -361,9 +389,20 @@ export default function DataSources() {
             </div>
           ) : (
             <div className="text-sm text-muted-foreground space-y-1">
-              <div className="flex items-center gap-2">
-                <span className="w-12">地址:</span>
-                <span className="font-medium text-foreground">{config.iotdb.host}:{config.iotdb.port}</span>
+              <div className="flex items-center gap-2 overflow-hidden">
+                <span className="w-12 shrink-0">地址:</span>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="font-medium text-foreground truncate cursor-help">
+                        {config.iotdb.host}:{config.iotdb.port}
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>{config.iotdb.host}:{config.iotdb.port}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               </div>
               <div className="flex items-center gap-2">
                 <span className="w-12">用户:</span>

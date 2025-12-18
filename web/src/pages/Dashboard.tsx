@@ -73,7 +73,9 @@ export default function Dashboard() {
     return <div className="text-center py-12 text-red-600">加载配置失败</div>
   }
 
-  const listenHost = config.prometheus.listen_address === '0.0.0.0' ? 'localhost' : config.prometheus.listen_address
+  const listenHost = (config.prometheus.listen_address === '0.0.0.0' || !config.prometheus.listen_address)
+    ? window.location.hostname
+    : config.prometheus.listen_address
   const metricsURL = `http://${listenHost}:${config.prometheus.listen_port}/metrics`
 
   return (
