@@ -85,7 +85,6 @@ Web UI 提供了可视化的配置管理界面，包括：
 |:---:|:---:|
 | ![测试连接](./images/测试连接.png) | ![指标配置](./images/指标配置.png) |
 
-详细实现情况请参考 [IMPLEMENTATION_STATUS.md](./IMPLEMENTATION_STATUS.md)
 
 ## 指标约定与扩展
 - 建议以业务域为前缀命名指标，例如 `sql2metrics_household_online`，标签使用小写英文。
@@ -104,7 +103,4 @@ Web UI 提供了可视化的配置管理界面，包括：
 - 集成 CI/CD 与自动化测试覆盖更多配置场景。
 - Web UI 增强：添加 API 认证机制、深色模式支持、Metrics 预览功能。
 
-## 相关文档
-- [Web UI 实现计划](./sql2metrics-web-ui.md)
-- [实现情况报告](./IMPLEMENTATION_STATUS.md)
-- [Web Agent 规范](./WEB-AGENT.md)
+
