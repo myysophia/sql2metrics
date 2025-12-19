@@ -42,13 +42,26 @@ export interface MetricSpec {
   name: string
   help: string
   type: 'gauge' | 'counter' | 'histogram' | 'summary'
-  source: 'mysql' | 'iotdb' | 'redis'
+  source: 'mysql' | 'iotdb' | 'redis' | 'restapi'
   query: string
   labels?: Record<string, string>
   result_field?: string
   connection?: string
   buckets?: number[]
   objectives?: Record<number, number>
+}
+
+export interface RestAPIConfig {
+  base_url: string
+  timeout?: string
+  headers?: Record<string, string>
+  tls?: {
+    skip_verify?: boolean
+  }
+  retry?: {
+    max_attempts?: number
+    backoff?: string
+  }
 }
 
 export interface Config {
@@ -60,6 +73,8 @@ export interface Config {
 
   redis: RedisConfig
   redis_connections: Record<string, RedisConfig>
+
+  restapi_connections: Record<string, RestAPIConfig>
 
   iotdb: IoTDBConfig
   metrics: MetricSpec[]

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import Editor from '@monaco-editor/react'
 import { api } from '../api/client'
+import { JsonFieldSelector } from './JsonFieldSelector'
 import type { Config, MetricSpec } from '../types/config'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -45,6 +46,7 @@ export default function MetricForm({ metric: initialMetric, metricIndex, config,
   const [previewing, setPreviewing] = useState(false)
   const [previewResult, setPreviewResult] = useState<{ success: boolean; value?: number; error?: string } | null>(null)
   const [showSaveConfirm, setShowSaveConfirm] = useState(false)
+  const [restapiPreviewData, setRestapiPreviewData] = useState<unknown>(null)
 
   const metricTypeTips: Record<MetricSpec['type'], string> = {
     gauge: 'Gauge：表示某一时刻的数值快照，可上可下（例如温度、队列长度）。',
@@ -117,6 +119,7 @@ export default function MetricForm({ metric: initialMetric, metricIndex, config,
 
   const mysqlConnections = Object.keys(config.mysql_connections || {})
   const redisConnections = Object.keys(config.redis_connections || {})
+  const restapiConnections = Object.keys(config.restapi_connections || {})
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
@@ -199,6 +202,7 @@ export default function MetricForm({ metric: initialMetric, metricIndex, config,
               <SelectItem value="mysql">MySQL</SelectItem>
               <SelectItem value="iotdb">IoTDB</SelectItem>
               <SelectItem value="redis">Redis</SelectItem>
+              <SelectItem value="restapi">RestAPI</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -256,7 +260,115 @@ export default function MetricForm({ metric: initialMetric, metricIndex, config,
             />
           </div>
         )}
+
+        {metric.source === 'restapi' && restapiConnections.length > 0 && (
+          <div className="space-y-2">
+            <Label>连接</Label>
+            <Select
+              value={metric.connection}
+              onValueChange={(value) => setMetric({ ...metric, connection: value })}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="选择连接" />
+              </SelectTrigger>
+              <SelectContent>
+                {restapiConnections.map((conn) => (
+                  <SelectItem key={conn} value={conn}>
+                    {conn}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
       </div>
+
+      {metric.source === 'restapi' && (
+        <div className="space-y-4">
+          {/* 获取响应按钮区域 */}
+          <div className="flex items-center gap-4">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={async () => {
+                if (!metric.connection) {
+                  setPreviewResult({ success: false, error: '请先选择连接' })
+                  return
+                }
+                const restapiConfig = config.restapi_connections?.[metric.connection]
+                if (!restapiConfig) {
+                  setPreviewResult({ success: false, error: '未找到连接配置' })
+                  return
+                }
+                // 如果没有查询，使用默认 GET（不带路径）
+                const query = metric.query || 'GET'
+                setPreviewing(true)
+                setRestapiPreviewData(null)
+                try {
+                  const result = await api.previewRestAPI(restapiConfig, query)
+                  if (result.success && result.data) {
+                    setPreviewResult({ success: true, value: 0 })
+                    setRestapiPreviewData(result.data)
+                  } else {
+                    setPreviewResult({ success: false, error: result.error || '预览失败' })
+                  }
+                } catch (e) {
+                  setPreviewResult({ success: false, error: (e as Error).message })
+                } finally {
+                  setPreviewing(false)
+                }
+              }}
+              disabled={previewing || !metric.connection}
+            >
+              {previewing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              获取 API 响应
+            </Button>
+            {previewResult && !previewResult.success && (
+              <span className="text-sm text-red-600">{previewResult.error}</span>
+            )}
+          </div>
+
+          {/* JSON 响应预览区域 */}
+          {restapiPreviewData !== null && (
+            <div className="space-y-3">
+              {/* 原始 JSON 显示 */}
+              <div className="border rounded-md p-3 bg-slate-50 dark:bg-slate-900">
+                <Label className="text-sm mb-2 block font-medium">API 响应 (JSON)</Label>
+                <pre className="max-h-40 overflow-auto text-xs font-mono whitespace-pre-wrap bg-white dark:bg-slate-950 p-2 rounded border">
+                  {JSON.stringify(restapiPreviewData, null, 2)}
+                </pre>
+              </div>
+
+              {/* 可选字段列表 */}
+              <div className="border rounded-md p-3 bg-muted/50">
+                <Label className="text-sm mb-2 block font-medium">可选字段 (点击自动填充 JSONPath)</Label>
+                <p className="text-xs text-muted-foreground mb-2">绿色数值字段可用作监控指标，点击即可填充到下方输入框</p>
+                <div className="max-h-48 overflow-auto text-xs font-mono">
+                  <JsonFieldSelector
+                    data={restapiPreviewData}
+                    onSelect={(path: string) => setMetric({ ...metric, result_field: path })}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* JSONPath 输入框 */}
+          <div className="space-y-2">
+            <Label>结果字段 (JSONPath) {restapiPreviewData !== null && <span className="text-xs text-muted-foreground ml-2">← 从上方选择或手动输入</span>}</Label>
+            <Input
+              type="text"
+              value={metric.result_field || ''}
+              onChange={(e) => setMetric({ ...metric, result_field: e.target.value || undefined })}
+              placeholder="例如: data.count 或 items[0].value"
+            />
+            <p className="text-xs text-muted-foreground">
+              支持格式: data.count、items[0].value、response.total、length 等
+            </p>
+          </div>
+        </div>
+      )}
 
       <div className="space-y-2">
         <div className="flex justify-between items-center">
@@ -423,7 +535,7 @@ export default function MetricForm({ metric: initialMetric, metricIndex, config,
             <AlertDialogTitle>确认保存指标？</AlertDialogTitle>
             <AlertDialogDescription>
               <div className="mt-4 space-y-2 text-sm text-foreground bg-muted p-4 rounded-md">
-                <div className="grid grid-cols-[80px_1fr] gap-2">
+                <div className="grid grid-cols-[100px_1fr] gap-2">
                   <span className="text-muted-foreground">名称:</span>
                   <span className="font-medium">{metric.name}</span>
 
@@ -439,9 +551,16 @@ export default function MetricForm({ metric: initialMetric, metricIndex, config,
                   <span className="text-muted-foreground">Help:</span>
                   <span className="font-medium">{metric.help}</span>
 
+                  {metric.source === 'restapi' && metric.result_field && (
+                    <>
+                      <span className="text-muted-foreground">JSONPath:</span>
+                      <code className="font-mono text-xs bg-background p-1 rounded border">{metric.result_field}</code>
+                    </>
+                  )}
+
                   <span className="text-muted-foreground">查询:</span>
                   <code className="font-mono text-xs break-all bg-background p-1 rounded border">
-                    {metric.query}
+                    {metric.query || (metric.source === 'restapi' ? 'GET (直接请求 base_url)' : '未设置')}
                   </code>
                 </div>
               </div>

@@ -22,6 +22,7 @@ type Service struct {
 	cfg        *config.Config
 	mysql      map[string]*datasource.MySQLClient
 	redis      map[string]*datasource.RedisClient
+	restapi    map[string]*datasource.RestAPIClient
 	iotdb      *datasource.IoTDBClient
 	metrics    []metricHolder
 	errorCount prometheus.Counter
@@ -31,8 +32,9 @@ type Service struct {
 }
 
 type metricHolder struct {
-	spec  config.MetricSpec
-	gauge prometheus.Gauge
+	spec      config.MetricSpec
+	gauge     prometheus.Gauge     // 用于设置值（Gauge 类型）
+	collector prometheus.Collector // 用于注销（所有类型）
 }
 
 // NewService 构造采集服务，按需初始化数据源。
@@ -42,6 +44,7 @@ func NewService(cfg *config.Config) (*Service, error) {
 		cfg:      cfg,
 		mysql:    make(map[string]*datasource.MySQLClient),
 		redis:    make(map[string]*datasource.RedisClient),
+		restapi:  make(map[string]*datasource.RestAPIClient),
 		registry: prometheus.NewRegistry(),
 	}
 
@@ -86,6 +89,21 @@ func NewService(cfg *config.Config) (*Service, error) {
 			log.Printf("警告: Redis 连接 %s 失败，相关指标将无法采集: %v", connName, err)
 		} else {
 			svc.redis[connName] = client
+		}
+	}
+
+	// 初始化 RestAPI 连接（失败时只记录警告，不阻止服务启动）
+	for connName := range restapiConnectionsNeeded(cfg) {
+		restapiCfg, ok := cfg.RestAPIConfigFor(connName)
+		if !ok {
+			log.Printf("警告: 未找到 RestAPI 连接配置 %s，相关指标将无法采集", connName)
+			continue
+		}
+		client, err := datasource.NewRestAPIClient(restapiCfg)
+		if err != nil {
+			log.Printf("警告: RestAPI 连接 %s 失败，相关指标将无法采集: %v", connName, err)
+		} else {
+			svc.restapi[connName] = client
 		}
 	}
 
@@ -162,12 +180,15 @@ func NewService(cfg *config.Config) (*Service, error) {
 			return nil, fmt.Errorf("注册指标 %s 失败: %w", spec.Name, err)
 		}
 
-		if gauge, ok := metric.(prometheus.Gauge); ok {
-			svc.metrics = append(svc.metrics, metricHolder{
-				spec:  spec,
-				gauge: gauge,
-			})
+		// 存储所有类型的指标，用于后续热更新时注销
+		holder := metricHolder{
+			spec:      spec,
+			collector: metric,
 		}
+		if gauge, ok := metric.(prometheus.Gauge); ok {
+			holder.gauge = gauge
+		}
+		svc.metrics = append(svc.metrics, holder)
 	}
 
 	svc.errorCount = prometheus.NewCounter(prometheus.CounterOpts{
@@ -211,6 +232,21 @@ func redisConnectionsNeeded(cfg *config.Config) map[string]struct{} {
 	required := make(map[string]struct{})
 	for _, m := range cfg.Metrics {
 		if m.Source != "redis" {
+			continue
+		}
+		name := m.Connection
+		if name == "" {
+			name = "default"
+		}
+		required[name] = struct{}{}
+	}
+	return required
+}
+
+func restapiConnectionsNeeded(cfg *config.Config) map[string]struct{} {
+	required := make(map[string]struct{})
+	for _, m := range cfg.Metrics {
+		if m.Source != "restapi" {
 			continue
 		}
 		name := m.Connection
@@ -304,6 +340,17 @@ func (s *Service) queryMetric(ctx context.Context, spec config.MetricSpec) (floa
 		}
 		log.Printf("执行 Redis 命令（连接=%s）: %s", conn, spec.Query)
 		return client.QueryScalar(ctx, spec.Query)
+	case "restapi":
+		conn := spec.Connection
+		if conn == "" {
+			conn = "default"
+		}
+		client, ok := s.restapi[conn]
+		if !ok {
+			return 0, fmt.Errorf("RestAPI 连接 %s 未初始化", conn)
+		}
+		log.Printf("执行 RestAPI 请求（连接=%s, 查询=%q, result_field=%q）", conn, spec.Query, spec.ResultField)
+		return client.QueryScalar(ctx, spec.Query, spec.ResultField)
 	default:
 		return 0, ErrDataSourceUnavailable(spec.Source)
 	}
@@ -334,6 +381,13 @@ func (s *Service) Close() {
 	if s.iotdb != nil {
 		if err := s.iotdb.Close(); err != nil {
 			log.Printf("关闭 IoTDB 连接失败: %v", err)
+		}
+	}
+	if s.restapi != nil {
+		for name, client := range s.restapi {
+			if err := client.Close(); err != nil {
+				log.Printf("关闭 RestAPI 连接 %s 失败: %v", name, err)
+			}
 		}
 	}
 	if s.registry != nil {
@@ -412,6 +466,7 @@ func (s *Service) ReloadConfig(newCfg *config.Config) ReloadResult {
 
 	newMySQLConnections := mysqlConnectionsNeeded(newCfg)
 	newRedisConnections := redisConnectionsNeeded(newCfg)
+	newRestAPIConnections := restapiConnectionsNeeded(newCfg)
 
 	for name := range oldMySQLConnections {
 		if _, needed := newMySQLConnections[name]; !needed {
@@ -430,6 +485,20 @@ func (s *Service) ReloadConfig(newCfg *config.Config) ReloadResult {
 		}
 	}
 
+	// 删除不再需要的 RestAPI 连接
+	oldRestAPIConnections := make(map[string]bool)
+	for name := range s.restapi {
+		oldRestAPIConnections[name] = true
+	}
+	for name := range oldRestAPIConnections {
+		if _, needed := newRestAPIConnections[name]; !needed {
+			if client, ok := s.restapi[name]; ok {
+				client.Close()
+				delete(s.restapi, name)
+			}
+		}
+	}
+
 	needsIoTDB := needsSource(newCfg.Metrics, "iotdb")
 	if !needsIoTDB && s.iotdb != nil {
 		s.iotdb.Close()
@@ -438,11 +507,8 @@ func (s *Service) ReloadConfig(newCfg *config.Config) ReloadResult {
 		var err error
 		s.iotdb, err = datasource.NewIoTDBClient(newCfg.IoTDB)
 		if err != nil {
-			return ReloadResult{
-				Success: false,
-				Error:   fmt.Sprintf("初始化 IoTDB 连接失败: %v", err),
-				Message: "热更新失败",
-			}
+			// IoTDB 连接失败不阻止其他配置更新，只记录警告
+			log.Printf("[警告] 初始化 IoTDB 连接失败: %v，IoTDB 相关指标将不可用", err)
 		}
 	}
 
@@ -473,13 +539,11 @@ func (s *Service) ReloadConfig(newCfg *config.Config) ReloadResult {
 		if _, exists := s.mysql[connName]; !exists {
 			client, err := datasource.NewMySQLClient(mysqlCfg)
 			if err != nil {
-				return ReloadResult{
-					Success: false,
-					Error:   fmt.Sprintf("初始化 MySQL 连接 %s 失败: %v", connName, err),
-					Message: "热更新失败",
-				}
+				// MySQL 连接失败不阻止其他配置更新，只记录警告
+				log.Printf("[警告] 初始化 MySQL 连接 %s 失败: %v，相关指标将不可用", connName, err)
+			} else {
+				s.mysql[connName] = client
 			}
-			s.mysql[connName] = client
 		}
 	}
 
@@ -510,19 +574,58 @@ func (s *Service) ReloadConfig(newCfg *config.Config) ReloadResult {
 		if _, exists := s.redis[connName]; !exists {
 			client, err := datasource.NewRedisClient(redisCfg)
 			if err != nil {
-				return ReloadResult{
-					Success: false,
-					Error:   fmt.Sprintf("初始化 Redis 连接 %s 失败: %v", connName, err),
-					Message: "热更新失败",
-				}
+				// Redis 连接失败不阻止其他配置更新，只记录警告
+				log.Printf("[警告] 初始化 Redis 连接 %s 失败: %v，相关指标将不可用", connName, err)
+			} else {
+				s.redis[connName] = client
 			}
-			s.redis[connName] = client
 		}
 	}
 
-	// 先注销所有旧指标
+	// 初始化或更新 RestAPI 连接
+	for connName := range newRestAPIConnections {
+		restapiCfg, ok := newCfg.RestAPIConfigFor(connName)
+		if !ok {
+			return ReloadResult{
+				Success: false,
+				Error:   fmt.Sprintf("未找到 RestAPI 连接 %s", connName),
+				Message: "热更新失败",
+			}
+		}
+
+		if client, exists := s.restapi[connName]; exists {
+			var oldRestAPI config.RestAPIConfig
+			var hasOld bool
+			if oldCfg != nil {
+				oldRestAPI, hasOld = oldCfg.RestAPIConfigFor(connName)
+			}
+			if !hasOld || !restapiConfigEqual(oldRestAPI, restapiCfg) {
+				log.Printf("检测到 RestAPI 连接 %s 配置变更，准备重建连接", connName)
+				_ = client.Close()
+				delete(s.restapi, connName)
+				exists = false
+			}
+		}
+
+		if _, exists := s.restapi[connName]; !exists {
+			client, err := datasource.NewRestAPIClient(restapiCfg)
+			if err != nil {
+				return ReloadResult{
+					Success: false,
+					Error:   fmt.Sprintf("初始化 RestAPI 连接 %s 失败: %v", connName, err),
+					Message: "热更新失败",
+				}
+			}
+			s.restapi[connName] = client
+		}
+	}
+
+	// 先注销所有旧指标（同时从自定义 registry 和全局 registry 注销）
 	for _, holder := range s.metrics {
-		s.registry.Unregister(holder.gauge)
+		if holder.collector != nil {
+			s.registry.Unregister(holder.collector)
+			prometheus.Unregister(holder.collector)
+		}
 	}
 	s.metrics = make([]metricHolder, 0)
 	
@@ -601,15 +704,17 @@ func (s *Service) ReloadConfig(newCfg *config.Config) ReloadResult {
 			}
 		}
 
-		if gauge, ok := metric.(prometheus.Gauge); ok {
-			holder := metricHolder{
-				spec:  spec,
-				gauge: gauge,
-			}
-			updatedMetrics = append(updatedMetrics, holder)
-			// 注意：prometheus.MustRegister(gauge) 这里不应该调用 global register，因为我们用的是 s.registry
-			newMetrics = append(newMetrics, spec.Name)
+		// 存储所有类型的指标，用于后续注销
+		holder := metricHolder{
+			spec:      spec,
+			collector: metric,
 		}
+		// 如果是 Gauge 类型，也存储 gauge 引用用于设置值
+		if gauge, ok := metric.(prometheus.Gauge); ok {
+			holder.gauge = gauge
+		}
+		updatedMetrics = append(updatedMetrics, holder)
+		newMetrics = append(newMetrics, spec.Name)
 	}
 
 	s.metrics = updatedMetrics
@@ -677,4 +782,13 @@ func redisConfigEqual(a, b config.RedisConfig) bool {
 		a.DB == b.DB &&
 		a.EnableTLS == b.EnableTLS &&
 		a.SkipTLSVerify == b.SkipTLSVerify
+}
+
+func restapiConfigEqual(a, b config.RestAPIConfig) bool {
+	return a.BaseURL == b.BaseURL &&
+		a.Timeout == b.Timeout &&
+		a.TLS.SkipVerify == b.TLS.SkipVerify &&
+		a.Retry.MaxAttempts == b.Retry.MaxAttempts &&
+		a.Retry.Backoff == b.Retry.Backoff &&
+		reflect.DeepEqual(a.Headers, b.Headers)
 }

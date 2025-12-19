@@ -65,6 +65,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.handleTestIoTDB(w, r)
 	case path == "/api/datasource/test/redis" && r.Method == "POST":
 		s.handleTestRedis(w, r)
+	case path == "/api/datasource/test/restapi" && r.Method == "POST":
+		s.handleTestRestAPI(w, r)
+	case path == "/api/datasource/restapi/preview" && r.Method == "POST":
+		s.handlePreviewRestAPI(w, r)
 	case path == "/api/datasource/query/preview" && r.Method == "POST":
 		s.handlePreviewQuery(w, r)
 	case path == "/api/metrics" && r.Method == "GET":
@@ -81,6 +85,33 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.handleUpdateMetric(w, r)
 	case strings.HasPrefix(path, "/api/metrics/") && r.Method == "DELETE":
 		s.handleDeleteMetric(w, r)
+
+	// 独立数据源 API
+	case strings.HasPrefix(path, "/api/datasource/mysql/") && r.Method == "PUT":
+		name := strings.TrimPrefix(path, "/api/datasource/mysql/")
+		s.handleUpdateMySQLConnection(w, r, name)
+	case strings.HasPrefix(path, "/api/datasource/mysql/") && r.Method == "DELETE":
+		name := strings.TrimPrefix(path, "/api/datasource/mysql/")
+		s.handleDeleteMySQLConnection(w, r, name)
+	case strings.HasPrefix(path, "/api/datasource/redis/") && r.Method == "PUT":
+		name := strings.TrimPrefix(path, "/api/datasource/redis/")
+		s.handleUpdateRedisConnection(w, r, name)
+	case strings.HasPrefix(path, "/api/datasource/redis/") && r.Method == "DELETE":
+		name := strings.TrimPrefix(path, "/api/datasource/redis/")
+		s.handleDeleteRedisConnection(w, r, name)
+	case strings.HasPrefix(path, "/api/datasource/restapi/") && !strings.HasSuffix(path, "/preview") && r.Method == "PUT":
+		name := strings.TrimPrefix(path, "/api/datasource/restapi/")
+		s.handleUpdateRestAPIConnection(w, r, name)
+	case strings.HasPrefix(path, "/api/datasource/restapi/") && !strings.HasSuffix(path, "/preview") && r.Method == "DELETE":
+		name := strings.TrimPrefix(path, "/api/datasource/restapi/")
+		s.handleDeleteRestAPIConnection(w, r, name)
+	case path == "/api/datasource/iotdb" && r.Method == "PUT":
+		s.handleUpdateIoTDB(w, r)
+
+	// 独立指标 API (新增)
+	case path == "/api/metrics/add" && r.Method == "POST":
+		s.handleAddMetric(w, r)
+
 	case path == "/metrics":
 		s.service.GetPrometheusHandler().ServeHTTP(w, r)
 	default:

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { api } from '../api/client'
-import type { MySQLConfig, IoTDBConfig, RedisConfig } from '../types/config'
+import type { MySQLConfig, IoTDBConfig, RedisConfig, RestAPIConfig } from '../types/config'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -16,9 +16,9 @@ import {
 import { Loader2, Check, X } from 'lucide-react'
 
 interface DataSourceFormProps {
-  type: 'mysql' | 'iotdb' | 'redis'
-  initialConfig: MySQLConfig | IoTDBConfig | RedisConfig
-  onSave: (config: MySQLConfig | IoTDBConfig | RedisConfig) => void
+  type: 'mysql' | 'iotdb' | 'redis' | 'restapi'
+  initialConfig: MySQLConfig | IoTDBConfig | RedisConfig | RestAPIConfig
+  onSave: (config: MySQLConfig | IoTDBConfig | RedisConfig | RestAPIConfig) => void
   onCancel: () => void
 }
 
@@ -31,6 +31,7 @@ export default function DataSourceForm({ type, initialConfig, onSave, onCancel }
     mutationFn: async () => {
       if (type === 'mysql') return api.testMySQL(config as MySQLConfig)
       if (type === 'iotdb') return api.testIoTDB(config as IoTDBConfig)
+      if (type === 'restapi') return api.testRestAPI(config as RestAPIConfig)
       return api.testRedis(config as RedisConfig)
     },
     onMutate: () => {
@@ -218,6 +219,161 @@ export default function DataSourceForm({ type, initialConfig, onSave, onCancel }
             </Label>
           </div>
         )}
+
+        <div className="flex items-center space-x-4">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => testMutation.mutate()}
+            disabled={testing}
+          >
+            {testing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            {testing ? '测试中…' : '测试连接'}
+          </Button>
+          {testResult && (
+            <span className={`flex items-center text-sm ${testResult.success ? 'text-green-600' : 'text-red-600'}`}>
+              {testResult.success ? <Check className="mr-1 h-4 w-4" /> : <X className="mr-1 h-4 w-4" />}
+              {testResult.success ? '连接成功' : testResult.message}
+            </span>
+          )}
+        </div>
+
+        <div className="flex justify-end space-x-2">
+          <Button type="button" variant="outline" onClick={onCancel}>
+            取消
+          </Button>
+          <Button type="submit">
+            保存
+          </Button>
+        </div>
+      </form>
+    )
+  }
+
+  if (type === 'restapi') {
+    const restapiConfig = config as RestAPIConfig
+    return (
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="space-y-2">
+          <Label>Base URL</Label>
+          <Input
+            type="url"
+            value={restapiConfig.base_url}
+            onChange={(e) => setConfig({ ...restapiConfig, base_url: e.target.value })}
+            required
+            placeholder="https://api.example.com"
+          />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label>超时时间</Label>
+            <Input
+              type="text"
+              value={restapiConfig.timeout || ''}
+              onChange={(e) => setConfig({ ...restapiConfig, timeout: e.target.value || undefined })}
+              placeholder="30s"
+            />
+          </div>
+          <div className="flex items-center space-x-2 mt-8">
+            <Checkbox
+              id="restapi-skip-verify"
+              checked={!!restapiConfig.tls?.skip_verify}
+              onCheckedChange={(checked) => setConfig({
+                ...restapiConfig,
+                tls: { ...restapiConfig.tls, skip_verify: checked as boolean }
+              })}
+            />
+            <Label htmlFor="restapi-skip-verify" className="font-normal">
+              跳过 TLS 证书验证
+            </Label>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label>最大重试次数</Label>
+            <Input
+              type="number"
+              value={restapiConfig.retry?.max_attempts ?? ''}
+              min={0}
+              onChange={(e) => setConfig({
+                ...restapiConfig,
+                retry: { ...restapiConfig.retry, max_attempts: e.target.value ? Number(e.target.value) : undefined }
+              })}
+              placeholder="3"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>重试间隔</Label>
+            <Input
+              type="text"
+              value={restapiConfig.retry?.backoff || ''}
+              onChange={(e) => setConfig({
+                ...restapiConfig,
+                retry: { ...restapiConfig.retry, backoff: e.target.value || undefined }
+              })}
+              placeholder="1s"
+            />
+          </div>
+        </div>
+
+        {/* Authorization 配置 */}
+        <div className="space-y-4 border-t pt-4">
+          <div className="space-y-2">
+            <Label>认证方式</Label>
+            <Select
+              value={restapiConfig.headers?.['Authorization'] ?
+                (restapiConfig.headers['Authorization'].startsWith('Bearer ') ? 'bearer' : 'apikey')
+                : 'none'}
+              onValueChange={(value) => {
+                const newHeaders = { ...restapiConfig.headers }
+                if (value === 'none') {
+                  delete newHeaders['Authorization']
+                } else if (value === 'bearer') {
+                  newHeaders['Authorization'] = 'Bearer '
+                } else if (value === 'apikey') {
+                  newHeaders['Authorization'] = ''
+                }
+                setConfig({ ...restapiConfig, headers: newHeaders })
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="选择认证方式" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">无认证</SelectItem>
+                <SelectItem value="bearer">Bearer Token</SelectItem>
+                <SelectItem value="apikey">API Key</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          {restapiConfig.headers?.['Authorization'] !== undefined && (
+            <div className="space-y-2">
+              <Label>
+                {restapiConfig.headers['Authorization']?.startsWith('Bearer ') ? 'Token' : 'API Key'}
+              </Label>
+              <Input
+                type="password"
+                value={
+                  restapiConfig.headers['Authorization']?.startsWith('Bearer ')
+                    ? restapiConfig.headers['Authorization'].slice(7)
+                    : restapiConfig.headers['Authorization'] || ''
+                }
+                onChange={(e) => {
+                  const prefix = restapiConfig.headers?.['Authorization']?.startsWith('Bearer ') ? 'Bearer ' : ''
+                  setConfig({
+                    ...restapiConfig,
+                    headers: {
+                      ...restapiConfig.headers,
+                      'Authorization': prefix + e.target.value
+                    }
+                  })
+                }}
+                placeholder="使用环境变量 ${API_TOKEN}"
+              />
+            </div>
+          )}
+        </div>
+
 
         <div className="flex items-center space-x-4">
           <Button

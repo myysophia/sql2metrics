@@ -190,6 +190,83 @@ func (s *Server) handleTestRedis(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleTestRestAPI 测试 RestAPI 连接。
+func (s *Server) handleTestRestAPI(w http.ResponseWriter, r *http.Request) {
+	var restapiCfg config.RestAPIConfig
+	if err := json.NewDecoder(r.Body).Decode(&restapiCfg); err != nil {
+		s.writeError(w, http.StatusBadRequest, fmt.Sprintf("解析 RestAPI 配置失败: %v", err))
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	client, err := datasource.NewRestAPIClient(restapiCfg)
+	if err != nil {
+		s.writeJSON(w, http.StatusOK, map[string]interface{}{
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
+	}
+	defer client.Close()
+
+	if err := client.Ping(ctx); err != nil {
+		s.writeJSON(w, http.StatusOK, map[string]interface{}{
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	s.writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"message": "RestAPI 连接测试成功",
+	})
+}
+
+// RestAPIPreviewRequest 用于预览 RestAPI 响应的请求。
+type RestAPIPreviewRequest struct {
+	Config config.RestAPIConfig `json:"config"`
+	Query  string               `json:"query"`
+}
+
+// handlePreviewRestAPI 预览 RestAPI 响应，返回完整 JSON 数据供字段选择。
+func (s *Server) handlePreviewRestAPI(w http.ResponseWriter, r *http.Request) {
+	var req RestAPIPreviewRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.writeError(w, http.StatusBadRequest, fmt.Sprintf("解析请求失败: %v", err))
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	client, err := datasource.NewRestAPIClient(req.Config)
+	if err != nil {
+		s.writeJSON(w, http.StatusOK, map[string]interface{}{
+			"success": false,
+			"error":   fmt.Sprintf("创建 RestAPI 客户端失败: %v", err),
+		})
+		return
+	}
+	defer client.Close()
+
+	result, err := client.QueryRaw(ctx, req.Query)
+	if err != nil {
+		s.writeJSON(w, http.StatusOK, map[string]interface{}{
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	s.writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"data":    result,
+	})
+}
+
 // QueryPreviewRequest 查询预览请求。
 type QueryPreviewRequest struct {
 	Source      string              `json:"source"`
@@ -545,4 +622,221 @@ func (s *Server) handleUpdateMetricByIndex(w http.ResponseWriter, r *http.Reques
 
 	s.setConfig(cfg)
 	s.writeJSON(w, http.StatusOK, metric)
+}
+
+// ===================== 独立数据源 API =====================
+
+// handleUpdateMySQLConnection 更新单个 MySQL 连接
+func (s *Server) handleUpdateMySQLConnection(w http.ResponseWriter, r *http.Request, name string) {
+	var mysqlCfg config.MySQLConfig
+	if err := json.NewDecoder(r.Body).Decode(&mysqlCfg); err != nil {
+		s.writeError(w, http.StatusBadRequest, fmt.Sprintf("解析配置失败: %v", err))
+		return
+	}
+
+	cfg := s.getConfig().Clone()
+	if cfg.MySQLConnections == nil {
+		cfg.MySQLConnections = make(map[string]config.MySQLConfig)
+	}
+	cfg.MySQLConnections[name] = mysqlCfg
+
+	if err := s.saveAndReload(cfg); err != nil {
+		s.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	s.writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"message": fmt.Sprintf("MySQL 连接 %s 已更新", name),
+	})
+}
+
+// handleDeleteMySQLConnection 删除单个 MySQL 连接
+func (s *Server) handleDeleteMySQLConnection(w http.ResponseWriter, r *http.Request, name string) {
+	cfg := s.getConfig().Clone()
+	if cfg.MySQLConnections == nil {
+		s.writeError(w, http.StatusNotFound, fmt.Sprintf("MySQL 连接 %s 不存在", name))
+		return
+	}
+	if _, ok := cfg.MySQLConnections[name]; !ok {
+		s.writeError(w, http.StatusNotFound, fmt.Sprintf("MySQL 连接 %s 不存在", name))
+		return
+	}
+	delete(cfg.MySQLConnections, name)
+
+	if err := s.saveAndReload(cfg); err != nil {
+		s.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	s.writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"message": fmt.Sprintf("MySQL 连接 %s 已删除", name),
+	})
+}
+
+// handleUpdateRedisConnection 更新单个 Redis 连接
+func (s *Server) handleUpdateRedisConnection(w http.ResponseWriter, r *http.Request, name string) {
+	var redisCfg config.RedisConfig
+	if err := json.NewDecoder(r.Body).Decode(&redisCfg); err != nil {
+		s.writeError(w, http.StatusBadRequest, fmt.Sprintf("解析配置失败: %v", err))
+		return
+	}
+
+	cfg := s.getConfig().Clone()
+	if cfg.RedisConnections == nil {
+		cfg.RedisConnections = make(map[string]config.RedisConfig)
+	}
+	cfg.RedisConnections[name] = redisCfg
+
+	if err := s.saveAndReload(cfg); err != nil {
+		s.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	s.writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"message": fmt.Sprintf("Redis 连接 %s 已更新", name),
+	})
+}
+
+// handleDeleteRedisConnection 删除单个 Redis 连接
+func (s *Server) handleDeleteRedisConnection(w http.ResponseWriter, r *http.Request, name string) {
+	cfg := s.getConfig().Clone()
+	if cfg.RedisConnections == nil {
+		s.writeError(w, http.StatusNotFound, fmt.Sprintf("Redis 连接 %s 不存在", name))
+		return
+	}
+	if _, ok := cfg.RedisConnections[name]; !ok {
+		s.writeError(w, http.StatusNotFound, fmt.Sprintf("Redis 连接 %s 不存在", name))
+		return
+	}
+	delete(cfg.RedisConnections, name)
+
+	if err := s.saveAndReload(cfg); err != nil {
+		s.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	s.writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"message": fmt.Sprintf("Redis 连接 %s 已删除", name),
+	})
+}
+
+// handleUpdateRestAPIConnection 更新单个 RestAPI 连接
+func (s *Server) handleUpdateRestAPIConnection(w http.ResponseWriter, r *http.Request, name string) {
+	var restCfg config.RestAPIConfig
+	if err := json.NewDecoder(r.Body).Decode(&restCfg); err != nil {
+		s.writeError(w, http.StatusBadRequest, fmt.Sprintf("解析配置失败: %v", err))
+		return
+	}
+
+	cfg := s.getConfig().Clone()
+	if cfg.RestAPIConnections == nil {
+		cfg.RestAPIConnections = make(map[string]config.RestAPIConfig)
+	}
+	cfg.RestAPIConnections[name] = restCfg
+
+	if err := s.saveAndReload(cfg); err != nil {
+		s.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	s.writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"message": fmt.Sprintf("RestAPI 连接 %s 已更新", name),
+	})
+}
+
+// handleDeleteRestAPIConnection 删除单个 RestAPI 连接
+func (s *Server) handleDeleteRestAPIConnection(w http.ResponseWriter, r *http.Request, name string) {
+	cfg := s.getConfig().Clone()
+	if cfg.RestAPIConnections == nil {
+		s.writeError(w, http.StatusNotFound, fmt.Sprintf("RestAPI 连接 %s 不存在", name))
+		return
+	}
+	if _, ok := cfg.RestAPIConnections[name]; !ok {
+		s.writeError(w, http.StatusNotFound, fmt.Sprintf("RestAPI 连接 %s 不存在", name))
+		return
+	}
+	delete(cfg.RestAPIConnections, name)
+
+	if err := s.saveAndReload(cfg); err != nil {
+		s.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	s.writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"message": fmt.Sprintf("RestAPI 连接 %s 已删除", name),
+	})
+}
+
+// handleUpdateIoTDB 更新 IoTDB 配置
+func (s *Server) handleUpdateIoTDB(w http.ResponseWriter, r *http.Request) {
+	var iotdbCfg config.IoTDBConfig
+	if err := json.NewDecoder(r.Body).Decode(&iotdbCfg); err != nil {
+		s.writeError(w, http.StatusBadRequest, fmt.Sprintf("解析配置失败: %v", err))
+		return
+	}
+
+	cfg := s.getConfig().Clone()
+	cfg.IoTDB = iotdbCfg
+
+	if err := s.saveAndReload(cfg); err != nil {
+		s.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	s.writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"message": "IoTDB 配置已更新",
+	})
+}
+
+// ===================== 独立指标 API =====================
+
+// handleAddMetric 新增指标
+func (s *Server) handleAddMetric(w http.ResponseWriter, r *http.Request) {
+	var metric config.MetricSpec
+	if err := json.NewDecoder(r.Body).Decode(&metric); err != nil {
+		s.writeError(w, http.StatusBadRequest, fmt.Sprintf("解析指标失败: %v", err))
+		return
+	}
+
+	cfg := s.getConfig().Clone()
+	cfg.Metrics = append(cfg.Metrics, metric)
+
+	if err := s.saveAndReload(cfg); err != nil {
+		s.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	s.writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"message": fmt.Sprintf("指标 %s 已添加", metric.Name),
+		"index":   len(cfg.Metrics) - 1,
+	})
+}
+
+// saveAndReload 保存配置并触发热更新
+func (s *Server) saveAndReload(cfg *config.Config) error {
+	if err := cfg.ApplyDefaults(); err != nil {
+		return fmt.Errorf("应用默认值失败: %v", err)
+	}
+	if err := cfg.Validate(); err != nil {
+		return fmt.Errorf("配置验证失败: %v", err)
+	}
+	if err := cfg.Save(s.configPath); err != nil {
+		return fmt.Errorf("保存配置失败: %v", err)
+	}
+
+	reloadResult := s.service.ReloadConfig(cfg)
+	if !reloadResult.Success {
+		return fmt.Errorf("热更新失败: %s", reloadResult.Error)
+	}
+
+	s.setConfig(cfg)
+	return nil
 }

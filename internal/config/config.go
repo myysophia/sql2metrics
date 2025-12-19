@@ -5,22 +5,32 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"regexp"
 	"strconv"
 	"time"
 
 	"gopkg.in/yaml.v3"
 )
 
+// labelNameRegex 匹配有效的 Prometheus label 名称
+var labelNameRegex = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
+
+// isValidLabelName 检查 label 名称是否符合 Prometheus 规范
+func isValidLabelName(name string) bool {
+	return labelNameRegex.MatchString(name)
+}
+
 // Config 描述采集服务的整体配置。
 type Config struct {
-	Schedule         ScheduleConfig         `yaml:"schedule" json:"schedule"`
-	Prometheus       PrometheusConfig       `yaml:"prometheus" json:"prometheus"`
-	MySQL            MySQLConfig            `yaml:"mysql" json:"mysql"`
-	MySQLConnections map[string]MySQLConfig `yaml:"mysql_connections" json:"mysql_connections"`
-	Redis            RedisConfig            `yaml:"redis" json:"redis"`
-	RedisConnections map[string]RedisConfig `yaml:"redis_connections" json:"redis_connections"`
-	IoTDB            IoTDBConfig            `yaml:"iotdb" json:"iotdb"`
-	Metrics          []MetricSpec           `yaml:"metrics" json:"metrics"`
+	Schedule            ScheduleConfig            `yaml:"schedule" json:"schedule"`
+	Prometheus          PrometheusConfig          `yaml:"prometheus" json:"prometheus"`
+	MySQL               MySQLConfig               `yaml:"mysql" json:"mysql"`
+	MySQLConnections    map[string]MySQLConfig    `yaml:"mysql_connections" json:"mysql_connections"`
+	Redis               RedisConfig               `yaml:"redis" json:"redis"`
+	RedisConnections    map[string]RedisConfig    `yaml:"redis_connections" json:"redis_connections"`
+	RestAPIConnections  map[string]RestAPIConfig  `yaml:"restapi_connections" json:"restapi_connections"`
+	IoTDB               IoTDBConfig               `yaml:"iotdb" json:"iotdb"`
+	Metrics             []MetricSpec              `yaml:"metrics" json:"metrics"`
 }
 
 // ScheduleConfig 控制采集周期。
@@ -66,6 +76,26 @@ type IoTDBConfig struct {
 	EnableTLS   bool   `yaml:"enable_tls" json:"enable_tls"`
 	EnableZstd  bool   `yaml:"enable_zstd" json:"enable_zstd"`
 	SessionPool int    `yaml:"session_pool" json:"session_pool,omitempty"`
+}
+
+// RestAPIConfig 填写 RESTful API 连接信息。
+type RestAPIConfig struct {
+	BaseURL string            `yaml:"base_url" json:"base_url"`
+	Timeout string            `yaml:"timeout" json:"timeout,omitempty"`
+	Headers map[string]string `yaml:"headers" json:"headers,omitempty"`
+	TLS     RestAPITLSConfig  `yaml:"tls" json:"tls,omitempty"`
+	Retry   RestAPIRetryConfig `yaml:"retry" json:"retry,omitempty"`
+}
+
+// RestAPITLSConfig 定义 RestAPI TLS 配置。
+type RestAPITLSConfig struct {
+	SkipVerify bool `yaml:"skip_verify" json:"skip_verify,omitempty"`
+}
+
+// RestAPIRetryConfig 定义 RestAPI 重试策略。
+type RestAPIRetryConfig struct {
+	MaxAttempts int    `yaml:"max_attempts" json:"max_attempts,omitempty"`
+	Backoff     string `yaml:"backoff" json:"backoff,omitempty"`
 }
 
 // MetricSpec 定义单个指标查询的元数据。
@@ -236,10 +266,11 @@ func (c *Config) Validate() error {
 		if m.Name == "" {
 			return errors.New("指标名称不能为空")
 		}
-		if m.Source != "mysql" && m.Source != "iotdb" && m.Source != "redis" {
+		if m.Source != "mysql" && m.Source != "iotdb" && m.Source != "redis" && m.Source != "restapi" {
 			return fmt.Errorf("指标 %s 的 source 非法: %s", m.Name, m.Source)
 		}
-		if m.Query == "" {
+		// RestAPI 类型允许查询为空（直接请求 base_url）
+		if m.Query == "" && m.Source != "restapi" {
 			return fmt.Errorf("指标 %s 缺少查询语句", m.Name)
 		}
 		metricType := m.Type
@@ -254,6 +285,12 @@ func (c *Config) Validate() error {
 		}
 		if metricType == "summary" && len(m.Objectives) == 0 {
 			return fmt.Errorf("指标 %s 类型为 summary，但未配置 objectives", m.Name)
+		}
+		// 验证 label 名称格式（必须以字母或下划线开头，只能包含字母、数字、下划线）
+		for labelName := range m.Labels {
+			if !isValidLabelName(labelName) {
+				return fmt.Errorf("指标 %s 的 label 名称 %q 无效，必须以字母或下划线开头，只能包含字母、数字和下划线", m.Name, labelName)
+			}
 		}
 		if m.Source == "mysql" {
 			conn := m.Connection
@@ -271,6 +308,15 @@ func (c *Config) Validate() error {
 			}
 			if _, ok := c.RedisConnections[conn]; !ok {
 				return fmt.Errorf("指标 %s 引用的 Redis 连接 %s 未配置", m.Name, conn)
+			}
+		}
+		if m.Source == "restapi" {
+			conn := m.Connection
+			if conn == "" {
+				conn = "default"
+			}
+			if _, ok := c.RestAPIConnections[conn]; !ok {
+				return fmt.Errorf("指标 %s 引用的 RestAPI 连接 %s 未配置", m.Name, conn)
 			}
 		}
 	}
@@ -318,6 +364,9 @@ func (c *Config) ApplyDefaults() error {
 			c.Metrics[i].Type = "gauge"
 		}
 	}
+	if c.RestAPIConnections == nil {
+		c.RestAPIConnections = make(map[string]RestAPIConfig)
+	}
 	return nil
 }
 
@@ -355,4 +404,25 @@ func (c *Config) Save(path string) error {
 		return fmt.Errorf("写入配置文件失败: %w", err)
 	}
 	return nil
+}
+
+// RestAPIConfigFor 返回指定名称的 RestAPI 配置，默认为 default。
+func (c *Config) RestAPIConfigFor(name string) (RestAPIConfig, bool) {
+	if name == "" {
+		name = "default"
+	}
+	if c.RestAPIConnections == nil {
+		return RestAPIConfig{}, false
+	}
+	conf, ok := c.RestAPIConnections[name]
+	return conf, ok
+}
+
+// Clone 创建配置的深拷贝
+func (c *Config) Clone() *Config {
+	// 使用 JSON 序列化/反序列化来实现深拷贝
+	data, _ := json.Marshal(c)
+	var clone Config
+	_ = json.Unmarshal(data, &clone)
+	return &clone
 }
