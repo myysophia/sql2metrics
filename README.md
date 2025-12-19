@@ -1,7 +1,11 @@
 # sql2metrics
 
 ## 项目简介
-sql2metrics 是一个以配置驱动的 Prometheus 指标采集器，能够定时执行数据库查询或 API 请求（当前支持 **MySQL**、**Redis**、**IoTDB** 与 **RESTful API**），并将结果转换为 Prometheus Metrics 暴露在 `/metrics` 端点。适用于快速将现有业务 SQL 或 API 转换为可监控的时间序列，用于观察趋势、告警与容量分析。
+**SQL2Metrics** 是一款**零代码、配置驱动**的通用 Prometheus Exporter。
+
+它允许你通过简单的 **SQL 查询**或 **API 请求**，直接将业务数据转化为 Prometheus 监控指标。无需编写任何 Exporter 代码，只需在 Web 界面进行配置，即可将 **MySQL**、**Redis**、**IoTDB** 以及 **RESTful API** 的数据快速接入监控体系。
+
+无论是业务运营指标（如订单量、用户数）、数据库状态，还是第三方服务监控，SQL2Metrics 都能助你以最低成本构建强大的可观测性。
 
 ## 架构图
 
@@ -60,30 +64,32 @@ sql2metrics 是一个以配置驱动的 Prometheus 指标采集器，能够定�
 - `schedule.interval`：采集周期，支持 `1h`、`30m` 等 Go duration 格式。
 - `mysql_connections`：声明多个 MySQL 连接（可共用实例不同库），指标通过 `connection` 字段选择。
 - `redis_connections`：声明多个 Redis 只读连接（目前支持 standalone），指标通过 `connection` 字段选择。
+- `restapi_connections`：声明多个 RestAPI 连接（支持 Base URL、认证头等），指标通过 `connection` 字段选择。
 - `iotdb`：配置 IoTDB 连接信息与会话参数；`result_field` 指定解析字段，若留空则自动选择首列。
-- `metrics`：描述每个指标的名称、帮助信息、查询 SQL、标签与数据源。
+- `metrics`：描述每个指标的名称、帮助信息、查询 SQL/API 路径、标签与数据源。
   - 支持指标类型：`gauge`、`counter`、`histogram`、`summary`
   - Histogram 类型需要配置 `buckets`
   - Summary 类型需要配置 `objectives`
+  - RestAPI 数据源需指定 `query` (HTTP 方法与路径) 和 `result_field` (JSONPath)
 
 ## Web UI 功能
 
 Web UI 提供了可视化的配置管理界面，包括：
 
-- **数据源管理**：可视化配置 MySQL 和 IoTDB 连接，支持连接测试
-- **指标管理**：创建、编辑、删除指标，支持 SQL 查询预览
-- **配置热更新**：保存配置后自动触发热更新，无需重启服务
-- **一键应用**：配置完成后一键保存并应用，自动打开 metrics 端点查看效果
+- **可视化数据源管理**：直观地配置 MySQL、Redis、RestAPI 和 IoTDB 连接，内置一键连接测试。
+- **交互式指标构建**：支持在线预览 SQL/API 查询结果，所见即所得地选择 JSON 字段生成指标。
+- **无感热更新**：配置修改后自动触发平滑重载，业务零中断，无需重启服务。
+- **一键预览应用**：配置完成后一键保存并生效，自动跳转 Metrics 端点验证数据。
 
 ### 界面预览
 
 | 概览页面 | 数据源配置 |
 |:---:|:---:|
-| ![概览](./images/概览.png) | ![数据源配置](./images/数据源配置.png) |
+| ![概览](./images/Overview.png) | ![数据源配置](./images/DataSources.png) |
 
 | 连接测试 | 指标配置 |
 |:---:|:---:|
-| ![测试连接](./images/测试连接.png) | ![指标配置](./images/指标配置.png) |
+| ![测试连接](./images/ConnectionTest.png) | ![指标配置](./images/Metrics.png) |
 
 
 ## 指标约定与扩展
@@ -91,16 +97,17 @@ Web UI 提供了可视化的配置管理界面，包括：
 - 同一指标可附加多标签（如 `region`、`category`），Prometheus 抓取后即可用于维度分析。
 - 新增指标只需追加一段配置，无需重新编译或部署代码。
 - Redis 数据源目前仅允许只读命令（GET/HGET/LLEN/SCARD/ZCARD/EXISTS 等），建议针对计数类 key 使用简单聚合命令，避免写操作与 Lua。
+- RestAPI 支持 GET/POST 等方法，可解析复杂的 JSON 响应结构。
 
 ## 运行与排查
 - 自监控指标：`collector_errors_total`（失败次数）、`collector_last_success_timestamp_seconds`（最近成功时间）。
-- 日志：执行每个指标会输出查询 SQL、执行耗时与结果，可快速定位慢查询或异常。
+- 日志：执行每个指标会输出查询 SQL/API 请求、执行耗时与结果，可快速定位慢查询或异常。
 - 若发生连接失败或权限错误，请检查数据库连通性、账号权限、SQL/Redis 命令是否在目标环境可执行。
 
 ## 下一步规划
-- 扩展更多数据源（如 PostgreSQL、REST API）。
+- 扩展更多数据源（如 PostgreSQL）。
 - 引入插件式聚合函数，支持对结果做平均、环比等计算。
 - 集成 CI/CD 与自动化测试覆盖更多配置场景。
-- Web UI 增强：添加 API 认证机制、深色模式支持、Metrics 预览功能。
+- Web UI 增强：添加 API 认证机制、深色模式支持。
 
 
