@@ -19,8 +19,8 @@
     }
 
     @keyframes pulse {
-      0%, 100% { opacity: 0.9; transform: scale(1); }
-      50% { opacity: 1; transform: scale(1.05); }
+      0%, 100% { opacity: 0.9; }
+      50% { opacity: 1; }
     }
 
     .rotate-slow {
@@ -129,10 +129,11 @@
 
   <!-- Data Flow Lines: Sources to Core -->
   <g>
-    <path d="M200 148 Q280 148 320 230" fill="none" stroke="#3b82f6" stroke-width="2" class="data-flow"/>
-    <path d="M200 203 Q280 203 320 250" fill="none" stroke="#ef4444" stroke-width="2" class="data-flow"/>
-    <path d="M200 258 Q280 258 320 270" fill="none" stroke="#22c55e" stroke-width="2" class="data-flow"/>
-    <path d="M200 313 Q280 313 320 290" fill="none" stroke="#8b5cf6" stroke-width="2" class="data-flow"/>
+    <!-- Connect to circle left edge (approx x=340-350) -->
+    <path d="M200 148 Q280 148 346 222" fill="none" stroke="#3b82f6" stroke-width="2" class="data-flow"/>
+    <path d="M200 203 Q280 203 341 241" fill="none" stroke="#ef4444" stroke-width="2" class="data-flow"/>
+    <path d="M200 258 Q280 258 341 279" fill="none" stroke="#22c55e" stroke-width="2" class="data-flow"/>
+    <path d="M200 313 Q280 313 346 297" fill="none" stroke="#8b5cf6" stroke-width="2" class="data-flow"/>
   </g>
 
   <!-- Center: SQL2Metrics Core -->
@@ -166,8 +167,8 @@
     <rect x="665" y="110" width="120" height="30" rx="6" fill="#f3e8ff" stroke="#d8b4fe" stroke-width="1"/>
     <text x="725" y="130" text-anchor="middle" font-size="10" fill="#9333ea">Config Assistant</text>
 
-    <!-- Connection Lines to Core only -->
-    <path d="M725 150 Q725 200 550 240" fill="none" stroke="#8b5cf6" stroke-width="1.5" stroke-dasharray="3,3" marker-end="url(#arrow)"/>
+    <!-- Connection Lines to Core only (Targeting circle edge at ~45deg) -->
+    <path d="M725 150 Q650 180 528 182" fill="none" stroke="#8b5cf6" stroke-width="1.5" stroke-dasharray="3,3"/>
   </g>
 
   <!-- Right: Prometheus Output -->
@@ -222,10 +223,11 @@
 
   <!-- Vertical Flow Lines: Management to Core -->
   <g>
-    <path d="M200 450 Q200 400 380 330" fill="none" stroke="#ec4899" stroke-width="1.5" stroke-dasharray="5,3"/>
-    <path d="M360 450 Q360 400 430 330" fill="none" stroke="#10b981" stroke-width="1.5" stroke-dasharray="5,3"/>
-    <path d="M520 450 Q520 400 480 330" fill="none" stroke="#6366f1" stroke-width="1.5" stroke-dasharray="5,3"/>
-    <path d="M680 450 Q680 400 520 330" fill="none" stroke="#8b5cf6" stroke-width="1.5" stroke-dasharray="5,3"/>
+    <!-- Connect to circle bottom edge (y varies by x) -->
+    <path d="M200 450 Q200 400 380 345" fill="none" stroke="#ec4899" stroke-width="1.5" stroke-dasharray="5,3"/>
+    <path d="M360 450 Q360 400 420 365" fill="none" stroke="#10b981" stroke-width="1.5" stroke-dasharray="5,3"/>
+    <path d="M520 450 Q520 400 480 365" fill="none" stroke="#6366f1" stroke-width="1.5" stroke-dasharray="5,3"/>
+    <path d="M680 450 Q680 400 520 345" fill="none" stroke="#8b5cf6" stroke-width="1.5" stroke-dasharray="5,3"/>
   </g>
 
 </svg>
