@@ -68,6 +68,15 @@
     @keyframes data-flow {
       to { stroke-dashoffset: -30; }
     }
+
+    .ai-mesh-border {
+      stroke-dasharray: 6, 4;
+      animation: ai-flow 3s linear infinite;
+    }
+
+    @keyframes ai-flow {
+      to { stroke-dashoffset: -20; }
+    }
   </style>
 
   <!-- Background -->
@@ -76,6 +85,13 @@
       <stop offset="0%" style="stop-color:#f8fafc"/>
       <stop offset="100%" style="stop-color:#f1f5f9"/>
     </linearGradient>
+    <linearGradient id="ai-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#d8b4fe"/>
+      <stop offset="100%" style="stop-color:#f3e8ff"/>
+    </linearGradient>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#8b5cf6" />
+    </marker>
   </defs>
   <rect width="900" height="550" fill="url(#bg-gradient)" stroke="#cbd5e1" stroke-width="2" rx="12"/>
 
@@ -133,69 +149,83 @@
     <text x="450" y="285" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="10" fill="#8b5cf6">Concurrent • Hot Reload • YAML</text>
   </g>
 
+  <!-- AI Copilot Mesh (Top Right) -->
+  <g class="fade-in">
+    <!-- Mesh Background: Dashed Box -->
+    <rect x="610" y="30" width="230" height="120" rx="15" fill="none" stroke="#8b5cf6" stroke-width="1.5" class="ai-mesh-border"/>
+    
+    <text x="725" y="55" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="16" font-weight="700" fill="#7c3aed">🤖 AI Copilot Mesh</text>
+    
+    <!-- AI Features -->
+    <rect x="620" y="70" width="100" height="30" rx="6" fill="#f3e8ff" stroke="#d8b4fe" stroke-width="1"/>
+    <text x="670" y="90" text-anchor="middle" font-size="10" fill="#9333ea">Text-to-SQL</text>
+    
+    <rect x="730" y="70" width="100" height="30" rx="6" fill="#f3e8ff" stroke="#d8b4fe" stroke-width="1"/>
+    <text x="780" y="90" text-anchor="middle" font-size="10" fill="#9333ea">Smart Diagnose</text>
+    
+    <rect x="665" y="110" width="120" height="30" rx="6" fill="#f3e8ff" stroke="#d8b4fe" stroke-width="1"/>
+    <text x="725" y="130" text-anchor="middle" font-size="10" fill="#9333ea">Config Assistant</text>
+
+    <!-- Connection Lines to Core only -->
+    <path d="M725 150 Q725 200 550 240" fill="none" stroke="#8b5cf6" stroke-width="1.5" stroke-dasharray="3,3" marker-end="url(#arrow)"/>
+  </g>
+
   <!-- Right: Prometheus Output -->
   <g class="fade-in">
-    <text x="780" y="120" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="16" font-weight="600" fill="#475569">Metrics Output</text>
+    <text x="780" y="215" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="16" font-weight="600" fill="#475569">Metrics Output</text>
 
     <!-- Prometheus Endpoint -->
-    <rect x="700" y="200" width="160" height="70" rx="12" fill="#f97316" fill-opacity="0.15" stroke="#f97316" stroke-width="2" class="glow-orange"/>
-    <text x="780" y="235" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="600" fill="#ea580c">🔥 Prometheus</text>
-    <text x="780" y="255" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="11" fill="#9a3412">/metrics endpoint</text>
+    <rect x="700" y="235" width="160" height="70" rx="12" fill="#f97316" fill-opacity="0.15" stroke="#f97316" stroke-width="2" class="glow-orange"/>
+    <text x="780" y="270" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="600" fill="#ea580c">🔥 Prometheus</text>
+    <text x="780" y="290" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="11" fill="#9a3412">/metrics endpoint</text>
 
     <!-- Grafana -->
-    <rect x="700" y="290" width="160" height="50" rx="10" fill="#06b6d4" fill-opacity="0.15" stroke="#06b6d4" stroke-width="2"/>
-    <text x="780" y="320" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="600" fill="#0891b2">📈 Grafana</text>
+    <rect x="700" y="325" width="160" height="50" rx="10" fill="#06b6d4" fill-opacity="0.15" stroke="#06b6d4" stroke-width="2"/>
+    <text x="780" y="355" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="600" fill="#0891b2">📈 Grafana</text>
 
     <!-- Alerting -->
-    <rect x="700" y="360" width="160" height="50" rx="10" fill="#eab308" fill-opacity="0.15" stroke="#eab308" stroke-width="2"/>
-    <text x="780" y="390" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="600" fill="#ca8a04">🚨 Alerting</text>
+    <rect x="700" y="395" width="160" height="50" rx="10" fill="#eab308" fill-opacity="0.15" stroke="#eab308" stroke-width="2"/>
+    <text x="780" y="425" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="600" fill="#ca8a04">🚨 Alerting</text>
   </g>
 
   <!-- Data Flow Lines: Core to Output -->
   <g>
-    <path d="M560 235 Q620 235 700 235" fill="none" stroke="#f97316" stroke-width="2" class="data-flow"/>
-    <path d="M560 260 Q620 280 700 315" fill="none" stroke="#06b6d4" stroke-width="2" class="data-flow"/>
-    <path d="M560 285 Q620 340 700 385" fill="none" stroke="#eab308" stroke-width="2" class="data-flow"/>
+    <path d="M560 260 Q620 260 700 270" fill="none" stroke="#f97316" stroke-width="2" class="data-flow"/>
+    <path d="M560 260 Q620 290 700 350" fill="none" stroke="#06b6d4" stroke-width="2" class="data-flow"/>
+    <path d="M560 260 Q620 340 700 420" fill="none" stroke="#eab308" stroke-width="2" class="data-flow"/>
   </g>
 
   <!-- Bottom: Web UI & Config -->
   <g class="fade-in">
-    <text x="450" y="430" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="16" font-weight="600" fill="#475569">Management Layer</text>
+    <text x="400" y="430" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="16" font-weight="600" fill="#475569">Management Layer</text>
 
     <!-- Web UI -->
-    <rect x="250" y="450" width="150" height="55" rx="10" fill="#ec4899" fill-opacity="0.15" stroke="#ec4899" stroke-width="2"/>
-    <text x="325" y="478" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="600" fill="#db2777">🌐 Web UI</text>
-    <text x="325" y="493" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="10" fill="#be185d">React + Shadcn</text>
+    <rect x="130" y="450" width="140" height="55" rx="10" fill="#ec4899" fill-opacity="0.15" stroke="#ec4899" stroke-width="2"/>
+    <text x="200" y="478" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="600" fill="#db2777">🌐 Web UI</text>
+    <text x="200" y="493" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="10" fill="#be185d">React + Shadcn</text>
 
     <!-- YAML Config -->
-    <rect x="420" y="450" width="150" height="55" rx="10" fill="#10b981" fill-opacity="0.15" stroke="#10b981" stroke-width="2"/>
-    <text x="495" y="478" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="600" fill="#059669">📝 YAML Config</text>
-    <text x="495" y="493" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="10" fill="#047857">Hot Reload</text>
+    <rect x="290" y="450" width="140" height="55" rx="10" fill="#10b981" fill-opacity="0.15" stroke="#10b981" stroke-width="2"/>
+    <text x="360" y="478" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="600" fill="#059669">📝 YAML Config</text>
+    <text x="360" y="493" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="10" fill="#047857">Hot Reload</text>
 
     <!-- REST API -->
-    <rect x="590" y="450" width="150" height="55" rx="10" fill="#6366f1" fill-opacity="0.15" stroke="#6366f1" stroke-width="2"/>
-    <text x="665" y="478" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="600" fill="#4f46e5">⚡ REST API</text>
-    <text x="665" y="493" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="10" fill="#4338ca">Config Management</text>
+    <rect x="450" y="450" width="140" height="55" rx="10" fill="#6366f1" fill-opacity="0.15" stroke="#6366f1" stroke-width="2"/>
+    <text x="520" y="478" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="600" fill="#4f46e5">⚡ REST API</text>
+    <text x="520" y="493" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="10" fill="#4338ca">Config Management</text>
+
+    <!-- MCP Server (New) -->
+    <rect x="610" y="450" width="140" height="55" rx="10" fill="none" stroke="#8b5cf6" stroke-width="2" stroke-dasharray="5,3"/>
+    <text x="680" y="478" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="600" fill="#7c3aed">🤖 MCP Server</text>
+    <text x="680" y="493" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="10" fill="#6d28d9">Agent Interface</text>
   </g>
 
   <!-- Vertical Flow Lines: Management to Core -->
   <g>
-    <path d="M325 450 Q325 400 400 330" fill="none" stroke="#ec4899" stroke-width="1.5" stroke-dasharray="5,3"/>
-    <path d="M495 450 Q495 400 470 330" fill="none" stroke="#10b981" stroke-width="1.5" stroke-dasharray="5,3"/>
-    <path d="M665 450 Q665 400 540 330" fill="none" stroke="#6366f1" stroke-width="1.5" stroke-dasharray="5,3"/>
-  </g>
-
-  <!-- Metric Types Legend -->
-  <g transform="translate(40, 420)">
-    <text x="0" y="0" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="600" fill="#475569">Metric Types:</text>
-    <rect x="0" y="10" width="60" height="22" rx="4" fill="#8b5cf6" fill-opacity="0.2"/>
-    <text x="30" y="25" text-anchor="middle" font-family="monospace" font-size="10" fill="#7c3aed">Gauge</text>
-    <rect x="70" y="10" width="60" height="22" rx="4" fill="#3b82f6" fill-opacity="0.2"/>
-    <text x="100" y="25" text-anchor="middle" font-family="monospace" font-size="10" fill="#2563eb">Counter</text>
-    <rect x="0" y="38" width="60" height="22" rx="4" fill="#22c55e" fill-opacity="0.2"/>
-    <text x="30" y="53" text-anchor="middle" font-family="monospace" font-size="10" fill="#16a34a">Histogram</text>
-    <rect x="70" y="38" width="60" height="22" rx="4" fill="#f97316" fill-opacity="0.2"/>
-    <text x="100" y="53" text-anchor="middle" font-family="monospace" font-size="10" fill="#ea580c">Summary</text>
+    <path d="M200 450 Q200 400 380 330" fill="none" stroke="#ec4899" stroke-width="1.5" stroke-dasharray="5,3"/>
+    <path d="M360 450 Q360 400 430 330" fill="none" stroke="#10b981" stroke-width="1.5" stroke-dasharray="5,3"/>
+    <path d="M520 450 Q520 400 480 330" fill="none" stroke="#6366f1" stroke-width="1.5" stroke-dasharray="5,3"/>
+    <path d="M680 450 Q680 400 520 330" fill="none" stroke="#8b5cf6" stroke-width="1.5" stroke-dasharray="5,3"/>
   </g>
 
 </svg>
