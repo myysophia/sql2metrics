@@ -13,9 +13,11 @@ import (
 
 	"github.com/joho/godotenv"
 
+	"github.com/company/ems-devices/internal/alerts"
 	"github.com/company/ems-devices/internal/api"
 	"github.com/company/ems-devices/internal/collectors"
 	"github.com/company/ems-devices/internal/config"
+	"github.com/company/ems-devices/internal/notifier"
 )
 
 func main() {
@@ -49,11 +51,61 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// 启动采集主循环。
+	// 初始化告警组件
+	alertStoragePath := "configs/alerts.json"
+	alertStorage := alerts.NewStorage(alertStoragePath)
+	if err := alertStorage.Load(); err != nil {
+		log.Printf("警告: 加载告警规则失败，将创建新的: %v", err)
+	}
+
+	alertHistory := alerts.NewHistory(1000) // 保留最近 1000 条历史
+	metricStore := alerts.NewMetricValueStore(48 * time.Hour) // 保留 48 小时数据
+
+	// 初始化告警评估器
+	var alertmanager *alerts.AlertmanagerClient
+
+	// 只有在内置通知服务未启用时，才初始化外部 Alertmanager
+	if cfg.Notifier.Enabled {
+		log.Printf("[NOTIFIER] 使用内置通知服务，不使用外部 Alertmanager")
+		alertmanager = nil
+	} else {
+		// 初始化 Alertmanager 客户端（从配置或环境变量读取）
+		alertmanagerURL := cfg.Alertmanager.URL
+		if alertmanagerURL == "" {
+			// 兼容环境变量
+			alertmanagerURL = os.Getenv("ALERTMANAGER_URL")
+			if alertmanagerURL == "" {
+				alertmanagerURL = "http://localhost:9093"
+			}
+		}
+		alertmanager = alerts.NewAlertmanagerClient(alertmanagerURL)
+		log.Printf("Alertmanager 地址: %s", alertmanagerURL)
+	}
+
+	alertEvaluator := alerts.NewEvaluator(alertStorage, alertHistory, alertmanager, metricStore, service)
+	service.SetAlertEvaluator(alertEvaluator)
+
+	// 初始化内置告警通知服务（如果配置启用）
+	if cfg.Notifier.Enabled {
+		log.Printf("[NOTIFIER] 初始化内置告警通知服务...")
+		notifierCfg := notifier.FromConfig(&cfg.Notifier)
+		notifierMgr := notifier.NewManager(notifierCfg)
+		alertEvaluator.SetNotifier(notifierMgr)
+		log.Printf("[NOTIFIER] 内置告警通知服务已启用，仅使用内置通知发送告警")
+	}
+
+	// 启动采集主循环
 	go service.Run(ctx)
 
-	// 暴露 Prometheus 指标和 API。
+	// 启动告警定时评估循环
+	go service.RunScheduledEvaluation(ctx)
+
+	// 暴露 Prometheus 指标和 API
 	apiServer := api.NewServer(configPath, service)
+
+	// 设置告警 API handler
+	alertHandler := alerts.NewHandler(alertStorage, alertHistory, alertEvaluator)
+	apiServer.SetAlertHandler(alertHandler)
 	
 	server := &http.Server{
 		Addr:    cfg.Prometheus.ListenAddr(),
