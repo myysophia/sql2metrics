@@ -1,5 +1,26 @@
+# 环境变量
 .env
+.env.local
+
+# 配置文件（包含敏感信息）
 configs/config.yml
+configs/config-*.yml
+!configs/config.example.yml
+!configs/config.demo.yml
+
+# 告警配置（包含敏感信息）
+alerts.json
+alertmanager.yml
+
+# 编译产物
 node_modules
 .cursor
 sql2metrics
+sql2metrics_*
+collector
+
+# 测试/临时文件
+*.test
+*.log
+.vscode/
+.idea/
