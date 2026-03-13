@@ -1,4 +1,4 @@
-import type { Config, MetricSpec, MySQLConfig, IoTDBConfig, RedisConfig, RestAPIConfig, ReloadResult } from '../types/config'
+import type { Config, MetricSpec, MySQLConfig, IoTDBConfig, RedisConfig, RestAPIConfig, ReloadResult, NotifierConfig } from '../types/config'
 
 const API_BASE = '/api'
 
@@ -162,5 +162,69 @@ export const api = {
     request<{ success: boolean; message: string; index: number }>('/metrics/add', {
       method: 'POST',
       body: JSON.stringify(metric),
+    }),
+
+  // ===================== 告警 API =====================
+  listAlerts: () => request<any[]>('/alerts'),
+
+  getAlert: (id: string) => request<any>(`/alerts/${encodeURIComponent(id)}`),
+
+  createAlert: (alert: any) =>
+    request<any>('/alerts', {
+      method: 'POST',
+      body: JSON.stringify(alert),
+    }),
+
+  updateAlert: (id: string, alert: any) =>
+    request<any>(`/alerts/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(alert),
+    }),
+
+  deleteAlert: (id: string) =>
+    request<{ message: string }>(`/alerts/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }),
+
+  enableAlert: (id: string) =>
+    request<{ message: string }>(`/alerts/${encodeURIComponent(id)}/enable`, {
+      method: 'POST',
+    }),
+
+  disableAlert: (id: string) =>
+    request<{ message: string }>(`/alerts/${encodeURIComponent(id)}/disable`, {
+      method: 'POST',
+    }),
+
+  testAlert: (id: string) =>
+    request<any>(`/alerts/${encodeURIComponent(id)}/test`, {
+      method: 'POST',
+    }),
+
+  getAlertHistory: (params?: { page?: number; page_size?: number; rule_id?: string }) => {
+    const queryString = params ? `?${new URLSearchParams(params as any).toString()}` : ''
+    return request<any>(`/alert-history${queryString}`)
+  },
+
+  evaluateAllAlerts: () =>
+    request<any[]>('/alerts/evaluate', {
+      method: 'POST',
+    }),
+
+  getAlertStats: () => request<any>('/alerts/stats'),
+
+  // ===================== 通知配置 API =====================
+  getNotifierConfig: () => request<NotifierConfig>('/notifier/config'),
+
+  updateNotifierConfig: (config: NotifierConfig) =>
+    request<{ message: string; reload?: ReloadResult }>('/notifier/config', {
+      method: 'PUT',
+      body: JSON.stringify(config),
+    }),
+
+  testNotifierWebhook: (channel: 'wechat' | 'dingtalk' | 'feishu', webhook: string, secret?: string) =>
+    request<{ success: boolean; message?: string; error?: string }>('/notifier/test', {
+      method: 'POST',
+      body: JSON.stringify({ channel, webhook, secret }),
     }),
 }

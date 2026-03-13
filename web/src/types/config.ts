@@ -64,9 +64,48 @@ export interface RestAPIConfig {
   }
 }
 
+// 内置通知服务配置
+export interface NotifierConfig {
+  enabled: boolean
+  group_wait?: string
+  group_interval?: string
+  repeat_interval?: string
+  wechat?: WeChatNotifierConfig
+  dingtalk?: DingTalkNotifierConfig
+  feishu?: FeishuNotifierConfig
+}
+
+export interface WeChatNotifierConfig {
+  enabled: boolean
+  webhook: string
+  mentioned_list?: string[]
+  mentioned_mobile_list?: string[]
+}
+
+export interface DingTalkNotifierConfig {
+  enabled: boolean
+  webhook: string
+  secret?: string
+  at_mobiles?: string[]
+  at_user_ids?: string[]
+  is_at_all?: boolean
+}
+
+export interface FeishuNotifierConfig {
+  enabled: boolean
+  webhook: string
+}
+
+// Alertmanager 配置
+export interface AlertmanagerConfig {
+  url: string
+}
+
 export interface Config {
   schedule: ScheduleConfig
   prometheus: PrometheusConfig
+  alertmanager: AlertmanagerConfig
+  notifier?: NotifierConfig
 
   mysql: MySQLConfig
   mysql_connections: Record<string, MySQLConfig>
