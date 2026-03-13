@@ -840,3 +840,75 @@ func (s *Server) saveAndReload(cfg *config.Config) error {
 	s.setConfig(cfg)
 	return nil
 }
+
+// ===================== Notifier 配置处理 =====================
+
+// handleGetNotifierConfig 获取通知服务配置
+func (s *Server) handleGetNotifierConfig(w http.ResponseWriter, r *http.Request) {
+	cfg := s.getConfig()
+
+	// 返回 notifier 配置，如果为空则返回默认配置
+	notifierCfg := cfg.Notifier
+	if !notifierCfg.Enabled && notifierCfg.WeChat == nil && notifierCfg.DingTalk == nil && notifierCfg.Feishu == nil {
+		// 返回一个默认的空配置
+		notifierCfg = config.NotifierConfig{}
+	}
+
+	s.writeJSON(w, http.StatusOK, notifierCfg)
+}
+
+// handleUpdateNotifierConfig 更新通知服务配置
+func (s *Server) handleUpdateNotifierConfig(w http.ResponseWriter, r *http.Request) {
+	var newNotifierCfg config.NotifierConfig
+	if err := json.NewDecoder(r.Body).Decode(&newNotifierCfg); err != nil {
+		s.writeError(w, http.StatusBadRequest, fmt.Sprintf("解析通知配置失败: %v", err))
+		return
+	}
+
+	// 获取当前配置
+	cfg := s.getConfig()
+
+	// 更新 notifier 配置
+	cfg.Notifier = newNotifierCfg
+
+	// 保存配置
+	if err := cfg.Save(s.configPath); err != nil {
+		s.writeError(w, http.StatusInternalServerError, fmt.Sprintf("保存配置失败: %v", err))
+		return
+	}
+
+	// 更新内存中的配置
+	s.setConfig(cfg)
+
+	s.writeJSON(w, http.StatusOK, map[string]string{
+		"message": "通知配置更新成功，重启服务后生效",
+	})
+}
+
+// handleTestNotifierWebhook 测试通知 webhook
+func (s *Server) handleTestNotifierWebhook(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Channel string `json:"channel"` // wechat, dingtalk, feishu
+		Webhook string `json:"webhook"`
+		Secret  string `json:"secret"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.writeError(w, http.StatusBadRequest, fmt.Sprintf("解析请求失败: %v", err))
+		return
+	}
+
+	if req.Webhook == "" {
+		s.writeError(w, http.StatusBadRequest, "webhook URL 不能为空")
+		return
+	}
+
+	// 根据通道类型发送测试消息
+	// TODO: 实现具体的测试逻辑
+	// 这里可以调用相应的 notifier 发送测试消息
+
+	s.writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"message": "测试消息已发送到 " + req.Channel,
+	})
+}

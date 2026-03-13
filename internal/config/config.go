@@ -24,6 +24,8 @@ func isValidLabelName(name string) bool {
 type Config struct {
 	Schedule            ScheduleConfig            `yaml:"schedule" json:"schedule"`
 	Prometheus          PrometheusConfig          `yaml:"prometheus" json:"prometheus"`
+	Alertmanager        AlertmanagerConfig        `yaml:"alertmanager" json:"alertmanager"`
+	Notifier            NotifierConfig            `yaml:"notifier" json:"notifier"`
 	MySQL               MySQLConfig               `yaml:"mysql" json:"mysql"`
 	MySQLConnections    map[string]MySQLConfig    `yaml:"mysql_connections" json:"mysql_connections"`
 	Redis               RedisConfig               `yaml:"redis" json:"redis"`
@@ -42,6 +44,52 @@ type ScheduleConfig struct {
 type PrometheusConfig struct {
 	ListenAddress string `yaml:"listen_address" json:"listen_address"`
 	ListenPort    int    `yaml:"listen_port" json:"listen_port"`
+}
+
+// AlertmanagerConfig 定义 Alertmanager 告警推送配置。
+type AlertmanagerConfig struct {
+	URL string `yaml:"url" json:"url"` // Alertmanager API 地址，如 http://localhost:9093
+}
+
+// NotifierConfig 定义内置告警通知服务配置。
+type NotifierConfig struct {
+	// Enable built-in alertmanager (if false, use external Alertmanager)
+	Enabled bool `yaml:"enabled" json:"enabled"`
+
+	// Notification channels
+	WeChat   *WeChatNotifierConfig   `yaml:"wechat,omitempty" json:"wechat,omitempty"`
+	DingTalk *DingTalkNotifierConfig `yaml:"dingtalk,omitempty" json:"dingtalk,omitempty"`
+	Feishu   *FeishuNotifierConfig   `yaml:"feishu,omitempty" json:"feishu,omitempty"`
+
+	// Grouping settings
+	GroupWait     string `yaml:"group_wait,omitempty" json:"group_wait,omitempty"`     // Wait time before sending first notification
+	GroupInterval string `yaml:"group_interval,omitempty" json:"group_interval,omitempty"` // Wait time between sending notifications for the same group
+	RepeatInterval string `yaml:"repeat_interval,omitempty" json:"repeat_interval,omitempty"` // How long to wait before resending a notification
+}
+
+// WeChatNotifierConfig 定义企业微信通知配置。
+type WeChatNotifierConfig struct {
+	Enabled bool     `yaml:"enabled" json:"enabled"`
+	Webhook string   `yaml:"webhook" json:"webhook"`
+	// Mention users
+	MentionedList      []string `yaml:"mentioned_list,omitempty" json:"mentioned_list,omitempty"`
+	MentionedMobileList []string `yaml:"mentioned_mobile_list,omitempty" json:"mentioned_mobile_list,omitempty"`
+}
+
+// DingTalkNotifierConfig 定义钉钉通知配置。
+type DingTalkNotifierConfig struct {
+	Enabled bool     `yaml:"enabled" json:"enabled"`
+	Webhook string   `yaml:"webhook" json:"webhook"`
+	Secret  string   `yaml:"secret,omitempty" json:"secret,omitempty"` // For signature verification
+	AtMobiles []string `yaml:"at_mobiles,omitempty" json:"at_mobiles,omitempty"`
+	AtUserIDs []string `yaml:"at_user_ids,omitempty" json:"at_user_ids,omitempty"`
+	IsAtAll   bool     `yaml:"is_at_all,omitempty" json:"is_at_all,omitempty"`
+}
+
+// FeishuNotifierConfig 定义飞书通知配置。
+type FeishuNotifierConfig struct {
+	Enabled bool   `yaml:"enabled" json:"enabled"`
+	Webhook string `yaml:"webhook" json:"webhook"`
 }
 
 // MySQLConfig 填写 MySQL 连接与查询所需信息。

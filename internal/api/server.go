@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/company/ems-devices/internal/alerts"
 	"github.com/company/ems-devices/internal/collectors"
 	"github.com/company/ems-devices/internal/config"
 	"github.com/company/ems-devices/web"
@@ -15,20 +16,28 @@ import (
 
 // Server 提供配置管理和数据源测试的 HTTP API。
 type Server struct {
-	configPath string
-	service    *collectors.Service
-	mu         sync.RWMutex
-	cfg        *config.Config
+	configPath    string
+	service       *collectors.Service
+	alertHandler  *alerts.Handler
+	mu            sync.RWMutex
+	cfg           *config.Config
 }
 
 // NewServer 创建新的 API 服务器。
 func NewServer(configPath string, service *collectors.Service) *Server {
 	cfg, _ := config.Load(configPath)
 	return &Server{
-		configPath: configPath,
-		service:    service,
-		cfg:        cfg,
+		configPath:   configPath,
+		service:      service,
+		cfg:          cfg,
 	}
+}
+
+// SetAlertHandler sets the alert handler
+func (s *Server) SetAlertHandler(handler *alerts.Handler) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.alertHandler = handler
 }
 
 // ServeHTTP 实现 http.Handler 接口。
@@ -75,43 +84,61 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.handleListMetrics(w, r)
 	case path == "/api/metrics" && r.Method == "POST":
 		s.handleCreateMetric(w, r)
-	case strings.HasPrefix(path, "/api/metrics/index/") && r.Method == "DELETE":
-		s.handleDeleteMetricByIndex(w, r)
 	case strings.HasPrefix(path, "/api/metrics/index/") && r.Method == "PUT":
 		s.handleUpdateMetricByIndex(w, r)
+	case strings.HasPrefix(path, "/api/metrics/index/") && r.Method == "DELETE":
+		s.handleDeleteMetricByIndex(w, r)
 	case strings.HasPrefix(path, "/api/metrics/") && r.Method == "GET":
 		s.handleGetMetric(w, r)
 	case strings.HasPrefix(path, "/api/metrics/") && r.Method == "PUT":
 		s.handleUpdateMetric(w, r)
 	case strings.HasPrefix(path, "/api/metrics/") && r.Method == "DELETE":
 		s.handleDeleteMetric(w, r)
-
-	// 独立数据源 API
+	// Alert routes
+	case s.alertHandler != nil && path == "/api/alerts" && r.Method == "GET":
+		s.alertHandler.ListAlerts(w, r)
+	case s.alertHandler != nil && path == "/api/alerts" && r.Method == "POST":
+		s.alertHandler.CreateAlert(w, r)
+	case s.alertHandler != nil && strings.HasPrefix(path, "/api/alerts/") && r.Method == "GET":
+		s.handleAlertRoute(w, r, s.alertHandler.GetAlert)
+	case s.alertHandler != nil && strings.HasPrefix(path, "/api/alerts/") && r.Method == "PUT":
+		s.handleAlertRoute(w, r, s.alertHandler.UpdateAlert)
+	case s.alertHandler != nil && strings.HasPrefix(path, "/api/alerts/") && r.Method == "DELETE":
+		s.handleAlertRoute(w, r, s.alertHandler.DeleteAlert)
+	case s.alertHandler != nil && strings.HasSuffix(path, "/enable") && r.Method == "POST":
+		s.handleAlertRoute(w, r, s.alertHandler.EnableAlert)
+	case s.alertHandler != nil && strings.HasSuffix(path, "/disable") && r.Method == "POST":
+		s.handleAlertRoute(w, r, s.alertHandler.DisableAlert)
+	case s.alertHandler != nil && strings.HasSuffix(path, "/test") && r.Method == "POST":
+		s.handleAlertRoute(w, r, s.alertHandler.TestAlert)
+	case s.alertHandler != nil && path == "/api/alert-history" && r.Method == "GET":
+		s.alertHandler.GetAlertHistory(w, r)
+	case s.alertHandler != nil && path == "/api/alerts/evaluate" && r.Method == "POST":
+		s.alertHandler.EvaluateAllAlerts(w, r)
+	case s.alertHandler != nil && path == "/api/alerts/stats" && r.Method == "GET":
+		s.alertHandler.GetAlertStats(w, r)
+	// Notifier configuration routes
+	case path == "/api/notifier/config" && r.Method == "GET":
+		s.handleGetNotifierConfig(w, r)
+	case path == "/api/notifier/config" && r.Method == "PUT":
+		s.handleUpdateNotifierConfig(w, r)
+	case path == "/api/notifier/test" && r.Method == "POST":
+		s.handleTestNotifierWebhook(w, r)
+	// Data source connection routes
 	case strings.HasPrefix(path, "/api/datasource/mysql/") && r.Method == "PUT":
-		name := strings.TrimPrefix(path, "/api/datasource/mysql/")
-		s.handleUpdateMySQLConnection(w, r, name)
+		s.handleDataSourceRoute(w, r, s.handleUpdateMySQLConnection)
 	case strings.HasPrefix(path, "/api/datasource/mysql/") && r.Method == "DELETE":
-		name := strings.TrimPrefix(path, "/api/datasource/mysql/")
-		s.handleDeleteMySQLConnection(w, r, name)
+		s.handleDataSourceRoute(w, r, s.handleDeleteMySQLConnection)
 	case strings.HasPrefix(path, "/api/datasource/redis/") && r.Method == "PUT":
-		name := strings.TrimPrefix(path, "/api/datasource/redis/")
-		s.handleUpdateRedisConnection(w, r, name)
+		s.handleDataSourceRoute(w, r, s.handleUpdateRedisConnection)
 	case strings.HasPrefix(path, "/api/datasource/redis/") && r.Method == "DELETE":
-		name := strings.TrimPrefix(path, "/api/datasource/redis/")
-		s.handleDeleteRedisConnection(w, r, name)
-	case strings.HasPrefix(path, "/api/datasource/restapi/") && !strings.HasSuffix(path, "/preview") && r.Method == "PUT":
-		name := strings.TrimPrefix(path, "/api/datasource/restapi/")
-		s.handleUpdateRestAPIConnection(w, r, name)
-	case strings.HasPrefix(path, "/api/datasource/restapi/") && !strings.HasSuffix(path, "/preview") && r.Method == "DELETE":
-		name := strings.TrimPrefix(path, "/api/datasource/restapi/")
-		s.handleDeleteRestAPIConnection(w, r, name)
+		s.handleDataSourceRoute(w, r, s.handleDeleteRedisConnection)
+	case strings.HasPrefix(path, "/api/datasource/restapi/") && r.Method == "PUT":
+		s.handleDataSourceRoute(w, r, s.handleUpdateRestAPIConnection)
+	case strings.HasPrefix(path, "/api/datasource/restapi/") && r.Method == "DELETE":
+		s.handleDataSourceRoute(w, r, s.handleDeleteRestAPIConnection)
 	case path == "/api/datasource/iotdb" && r.Method == "PUT":
 		s.handleUpdateIoTDB(w, r)
-
-	// 独立指标 API (新增)
-	case path == "/api/metrics/add" && r.Method == "POST":
-		s.handleAddMetric(w, r)
-
 	case path == "/metrics":
 		s.service.GetPrometheusHandler().ServeHTTP(w, r)
 	default:
@@ -174,4 +201,28 @@ func (s *Server) setConfig(cfg *config.Config) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.cfg = cfg
+}
+
+// handleAlertRoute is a helper for alert routes that need path parsing
+func (s *Server) handleAlertRoute(w http.ResponseWriter, r *http.Request, handler func(http.ResponseWriter, *http.Request)) {
+	// Ensure the alert handler is set
+	if s.alertHandler == nil {
+		s.writeError(w, http.StatusServiceUnavailable, "告警功能未启用")
+		return
+	}
+
+	// Call the handler
+	handler(w, r)
+}
+
+// handleDataSourceRoute is a helper for data source connection routes that need name extraction
+func (s *Server) handleDataSourceRoute(w http.ResponseWriter, r *http.Request, handler func(http.ResponseWriter, *http.Request, string)) {
+	// Extract name from path like "/api/datasource/mysql/{name}"
+	parts := strings.Split(r.URL.Path, "/")
+	if len(parts) < 5 {
+		s.writeError(w, http.StatusBadRequest, "无效的路径")
+		return
+	}
+	name := parts[4]
+	handler(w, r, name)
 }
