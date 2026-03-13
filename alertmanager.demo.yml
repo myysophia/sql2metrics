@@ -1,0 +1,104 @@
+# Alertmanager 配置示例
+# 文件位置: alertmanager.yml
+
+# 全局配置
+global:
+  resolve_timeout: 5m
+  # SMTP 配置（用于邮件通知）
+  smtp_smarthost: 'smtp.example.com:587'
+  smtp_from: 'sql2metrics@example.com'
+  smtp_auth_username: 'sql2metrics@example.com'
+  smtp_auth_password: 'your-password'
+
+# 路由配置
+route:
+  # 按标签分组
+  group_by: ['alertname', 'severity', 'team']
+
+  # 等待时间，收集同组告警后一起发送
+  group_wait: 10s
+
+  # 同组告警的发送间隔
+  group_interval: 10s
+
+  # 重复告警的发送间隔
+  repeat_interval: 12h
+
+  # 默认接收器
+  receiver: 'default'
+
+  # 子路由（按严重级别路由）
+  routes:
+    # 严重告警发送到 critical 接收器
+    - match:
+        severity: critical
+      receiver: 'critical'
+      group_wait: 0s  # 立即发送
+      repeat_interval: 5min  # 更频繁的重复通知
+
+# 接收器配置
+receivers:
+  # 默认接收器
+  - name: 'default'
+    # 邮件通知
+    email_configs:
+      - to: 'alerts@example.com'
+        headers:
+          Subject: '[SQL2Metrics] {{ .GroupLabels.alertname }}'
+        html: |
+          <h2>{{ .GroupLabels.alertname }}</h2>
+          <p><strong>严重级别:</strong> {{ .GroupLabels.severity }}</p>
+          <p><strong>团队:</strong> {{ .GroupLabels.team }}</p>
+          <table>
+            <tr><th>告警</th><th>值</th><th>描述</th></tr>
+          {{ range .Alerts }}
+            <tr>
+              <td>{{ .Labels.alertname }}</td>
+              <td>{{ .Annotations.value }}</td>
+              <td>{{ .Annotations.message }}</td>
+            </tr>
+          {{ end }}
+          </table>
+
+    # Slack 通知
+    slack_configs:
+      - api_url: 'https://hooks.slack.com/services/YOUR/WEBHOOK/URL'
+        channel: '#alerts'
+        title: '[{{ .Status | toUpper }}] {{ .GroupLabels.alertname }}'
+        text: |
+          *告警*: {{ .GroupLabels.alertname }}
+          *严重级别*: {{ .GroupLabels.severity }}
+          *团队*: {{ .GroupLabels.team }}
+          {{ range .Alerts }}
+          - {{ .Annotations.message }}
+          {{ end }}
+
+    # Webhook 通知（企业微信、钉钉等）
+    webhook_configs:
+      - url: 'http://your-webhook-endpoint/alert'
+        send_resolved: true  # 发送恢复通知
+
+  # 严重告警接收器
+  - name: 'critical'
+    email_configs:
+      - to: 'oncall@example.com'
+        headers:
+          Subject: '[CRITICAL] {{ .GroupLabels.alertname }} 需要立即处理'
+
+    # 电话通知（通过 PagerDuty 等）
+    # pagerduty_configs:
+    #   - service_key: 'your-pagerduty-key'
+    #     description: '{{ .GroupLabels.alertname }}'
+
+# 抑制规则（避免重复通知）
+inhibit_rules:
+  # 当有严重告警时，抑制同一资源的警告告警
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'resource']
+
+# 模板配置（可选）
+templates:
+  - '/etc/alertmanager/templates/*.tmpl'

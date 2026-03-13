@@ -1,0 +1,123 @@
+# SQL2Metrics 配置示例
+
+# 采集计划配置
+schedule:
+  interval: "1m"  # 每 1 分钟采集一次
+
+# Prometheus 指标暴露配置
+prometheus:
+  listen_address: "0.0.0.0"
+  listen_port: 8080
+
+# MySQL 数据源配置（默认连接）
+mysql:
+  host: "localhost"
+  port: 3306
+  user: "root"
+  password: "password"
+  database: "mydb"
+
+# 多 MySQL 连接配置示例
+mysql_connections:
+  default:
+    host: "localhost"
+    port: 3306
+    user: "root"
+    password: "password"
+    database: "mydb"
+
+  # 另一个 MySQL 实例
+  analytics:
+    host: "analytics.db.local"
+    port: 3306
+    user: "readonly"
+    password: "analytics_password"
+    database: "analytics"
+
+# Redis 数据源配置（默认连接）
+redis:
+  mode: "standalone"
+  addr: "localhost:6379"
+  password: ""
+  db: 0
+
+# 多 Redis 连接配置示例
+redis_connections:
+  default:
+    mode: "standalone"
+    addr: "localhost:6379"
+    password: ""
+    db: 0
+
+  # Redis 缓存实例
+  cache:
+    mode: "standalone"
+    addr: "cache.local:6379"
+    password: "cache_password"
+    db: 0
+
+# IoTDB 数据源配置
+iotdb:
+  host: "localhost"
+  port: 6667
+  user: "root"
+  password: "root"
+  fetch_size: 1024
+  zone_id: "UTC+08:00"
+  enable_tls: false
+  enable_zstd: false
+  session_pool: 5
+
+# 指标定义
+metrics:
+  # 示例 1: 设备总数 - 阈值告警演示
+  - name: "energy_household_total"
+    help: "户储设备总量"
+    type: "gauge"
+    source: "mysql"
+    connection: "default"
+    query: "SELECT COUNT(*) FROM equipment_equipment WHERE type = 'household'"
+    labels:
+      category: "residential"
+      region: "au"
+
+  # 示例 2: 在线设备数量
+  - name: "energy_household_online"
+    help: "在线户储设备数量"
+    type: "gauge"
+    source: "mysql"
+    connection: "default"
+    query: "SELECT COUNT(*) FROM equipment_equipment WHERE type = 'household' AND status = 'online'"
+    labels:
+      category: "residential"
+
+  # 示例 3: 平均 SOC（状态 of charge）
+  - name: "emsau_avgSoc"
+    help: "EMS 平均 SOC"
+    type: "gauge"
+    source: "mysql"
+    connection: "default"
+    query: "SELECT AVG(soc) FROM battery_status WHERE timestamp > DATE_SUB(NOW(), INTERVAL 5 MINUTE)"
+    labels:
+      metric_type: "average"
+
+  # 示例 4: Redis 队列长度
+  - name: "task_queue_length"
+    help: "任务队列长度"
+    type: "gauge"
+    source: "redis"
+    connection: "default"
+    query: "LLEN task_queue"
+    labels:
+      queue: "tasks"
+
+  # 示例 5: IoTDB 温度传感器
+  - name: "sensor_temperature"
+    help: "温度传感器读数"
+    type: "gauge"
+    source: "iotdb"
+    query: "SELECT last(temperature) FROM root.sg1.d1"
+    result_field: "root.sg1.d1.temperature"
+    labels:
+      sensor_type: "temperature"
+      location: "datacenter1"

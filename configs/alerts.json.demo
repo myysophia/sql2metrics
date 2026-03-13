@@ -1,0 +1,156 @@
+[
+  {
+    "id": "alert-001",
+    "name": "设备数量高告警",
+    "description": "当户储设备总量超过 1000 时触发告警",
+    "enabled": true,
+    "metric_name": "energy_household_total",
+    "evaluation_mode": "collection",
+    "condition": {
+      "type": "threshold",
+      "threshold": {
+        "operator": ">=",
+        "value": 1000,
+        "duration": "5m"
+      }
+    },
+    "severity": "warning",
+    "labels": {
+      "category": "capacity",
+      "team": "operations"
+    },
+    "annotations": {
+      "summary": "设备数量过高",
+      "runbook": "https://docs.example.com/runbooks/high-devices"
+    },
+    "state": "pending",
+    "last_evaluation": "",
+    "last_triggered": "",
+    "trigger_count": 0,
+    "created_at": "2026-03-12T10:00:00Z",
+    "updated_at": "2026-03-12T10:00:00Z"
+  },
+  {
+    "id": "alert-002",
+    "name": "在线设备率低告警",
+    "description": "当在线设备数量突然下降超过 50 时告警",
+    "enabled": true,
+    "metric_name": "energy_household_online",
+    "evaluation_mode": "collection",
+    "condition": {
+      "type": "trend",
+      "trend": {
+        "type": "decrease",
+        "window": "1h",
+        "threshold": 50
+      }
+    },
+    "severity": "critical",
+    "labels": {
+      "category": "availability",
+      "team": "operations"
+    },
+    "annotations": {
+      "summary": "在线设备数量异常下降"
+    },
+    "state": "pending",
+    "last_evaluation": "",
+    "last_triggered": "",
+    "trigger_count": 0,
+    "created_at": "2026-03-12T10:00:00Z",
+    "updated_at": "2026-03-12T10:00:00Z"
+  },
+  {
+    "id": "alert-003",
+    "name": "平均 SOC 异常告警",
+    "description": "当平均 SOC 出现统计异常时告警（使用 Z-Score 算法）",
+    "enabled": true,
+    "metric_name": "emsau_avgSoc",
+    "evaluation_mode": "scheduled",
+    "evaluation_interval": "5m",
+    "condition": {
+      "type": "anomaly",
+      "anomaly": {
+        "algorithm": "zscore",
+        "window": "24h",
+        "threshold": 3,
+        "sensitivity": "medium"
+      }
+    },
+    "severity": "warning",
+    "labels": {
+      "category": "battery",
+      "team": "maintenance"
+    },
+    "annotations": {
+      "summary": "电池 SOC 水平异常"
+    },
+    "state": "pending",
+    "last_evaluation": "",
+    "last_triggered": "",
+    "trigger_count": 0,
+    "created_at": "2026-03-12T10:00:00Z",
+    "updated_at": "2026-03-12T10:00:00Z"
+  },
+  {
+    "id": "alert-004",
+    "name": "任务队列积压告警",
+    "description": "当任务队列长度超过 10000 且持续 10 分钟时告警",
+    "enabled": false,
+    "metric_name": "task_queue_length",
+    "evaluation_mode": "collection",
+    "condition": {
+      "type": "threshold",
+      "threshold": {
+        "operator": ">",
+        "value": 10000,
+        "duration": "10m"
+      }
+    },
+    "severity": "critical",
+    "labels": {
+      "category": "performance",
+      "team": "backend"
+    },
+    "annotations": {
+      "summary": "任务队列严重积压"
+    },
+    "state": "pending",
+    "last_evaluation": "",
+    "last_triggered": "",
+    "trigger_count": 0,
+    "created_at": "2026-03-12T10:00:00Z",
+    "updated_at": "2026-03-12T10:00:00Z"
+  },
+  {
+    "id": "alert-005",
+    "name": "温度突增告警",
+    "description": "当温度在 30 分钟内增长超过 20% 时告警",
+    "enabled": true,
+    "metric_name": "sensor_temperature",
+    "evaluation_mode": "scheduled",
+    "evaluation_interval": "1m",
+    "condition": {
+      "type": "trend",
+      "trend": {
+        "type": "percentage_change",
+        "window": "30m",
+        "threshold": 20
+      }
+    },
+    "severity": "warning",
+    "labels": {
+      "category": "environment",
+      "team": "facilities"
+    },
+    "annotations": {
+      "summary": "温度异常上升"
+    },
+    "state": "pending",
+    "last_evaluation": "",
+    "last_triggered": "",
+    "trigger_count": 0,
+    "created_at": "2026-03-12T10:00:00Z",
+    "updated_at": "2026-03-12T10:00:00Z"
+  }
+]
