@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -911,4 +914,265 @@ func (s *Server) handleTestNotifierWebhook(w http.ResponseWriter, r *http.Reques
 		"success": true,
 		"message": "测试消息已发送到 " + req.Channel,
 	})
+}
+
+// handleListAvailableMetrics 列出可用的指标
+func (s *Server) handleListAvailableMetrics(w http.ResponseWriter, r *http.Request) {
+	cfg := s.getConfig()
+	metrics := make([]string, 0, len(cfg.Metrics))
+	for _, m := range cfg.Metrics {
+		metrics = append(metrics, m.Name)
+	}
+	s.writeJSON(w, http.StatusOK, metrics)
+}
+
+// handleQueryTimeseries 查询时序数据
+func (s *Server) handleQueryTimeseries(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Metrics []string `json:"metrics"`
+		Start   string   `json:"start"`
+		End     string   `json:"end"`
+		Step    string   `json:"step"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.writeError(w, http.StatusBadRequest, fmt.Sprintf("解析请求失败: %v", err))
+		return
+	}
+
+	log.Printf("[API] 查询时序数据: metrics=%v, start=%s, end=%s", req.Metrics, req.Start, req.End)
+
+	if len(req.Metrics) == 0 {
+		s.writeError(w, http.StatusBadRequest, "metrics 不能为空")
+		return
+	}
+
+	if req.Start == "" {
+		req.Start = "-1h"
+	}
+	if req.End == "" {
+		req.End = "now"
+	}
+	if req.Step == "" {
+		req.Step = "30s"
+	}
+
+	// 解析时间参数为 Unix 时间戳
+	startTime, err := parseTimeToUnix(req.Start)
+	if err != nil {
+		s.writeError(w, http.StatusBadRequest, fmt.Sprintf("无法解析 start 时间 %s: %v", req.Start, err))
+		return
+	}
+	endTime, err := parseTimeToUnix(req.End)
+	if err != nil {
+		s.writeError(w, http.StatusBadRequest, fmt.Sprintf("无法解析 end 时间 %s: %v", req.End, err))
+		return
+	}
+
+	log.Printf("[API] 解析时间: %s -> %d, %s -> %d", req.Start, startTime, req.End, endTime)
+
+	// 获取 Prometheus 地址
+	cfg := s.getConfig()
+	var prometheusURL string
+	if cfg.Prometheus.URL != "" {
+		// 使用配置的外部 Prometheus URL
+		prometheusURL = cfg.Prometheus.URL
+	} else {
+		// 使用本地 Prometheus 地址
+		prometheusURL = fmt.Sprintf("http://%s:%d", cfg.Prometheus.ListenAddress, cfg.Prometheus.ListenPort)
+	}
+	log.Printf("[API] Prometheus URL: %s", prometheusURL)
+
+	// 查询每个指标
+	result := make([]map[string]interface{}, 0)
+	for _, metricName := range req.Metrics {
+		// 构建 Prometheus 查询 URL (使用 Unix 时间戳)
+		queryURL := fmt.Sprintf(
+			"%s/api/v1/query_range?query=%s&start=%d&end=%d&step=%s",
+			prometheusURL,
+			metricName,
+			startTime,
+			endTime,
+			req.Step,
+		)
+
+		log.Printf("[API] 查询 Prometheus: %s", queryURL)
+
+		// 发送 HTTP 请求到 Prometheus
+		resp, err := http.Get(queryURL)
+		if err != nil {
+			log.Printf("[API] 查询 Prometheus 失败: %v", err)
+			s.writeError(w, http.StatusInternalServerError, fmt.Sprintf("查询 Prometheus 失败: %v", err))
+			return
+		}
+		defer resp.Body.Close()
+
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			log.Printf("[API] 读取响应失败: %v", err)
+			s.writeError(w, http.StatusInternalServerError, fmt.Sprintf("读取响应失败: %v", err))
+			return
+		}
+
+		if resp.StatusCode != 200 {
+			log.Printf("[API] Prometheus 返回错误 %d: %s", resp.StatusCode, string(body))
+			s.writeError(w, http.StatusInternalServerError, fmt.Sprintf("Prometheus 返回错误: %s", string(body)))
+			return
+		}
+
+		log.Printf("[API] Prometheus 响应: %s", string(body[:min(500, len(body))]))
+
+		// 解析 Prometheus 响应
+		var promResp struct {
+			Data struct {
+				Result []struct {
+					Metric map[string]string `json:"metric"`
+					Values [][]interface{}    `json:"values"`
+				} `json:"result"`
+			} `json:"data"`
+		}
+
+		if err := json.Unmarshal(body, &promResp); err != nil {
+			s.writeError(w, http.StatusInternalServerError, fmt.Sprintf("解析 Prometheus 响应失败: %v", err))
+			return
+		}
+
+		// 转换数据格式
+		for _, r := range promResp.Data.Result {
+			values := make([][2]float64, 0, len(r.Values))
+			for _, v := range r.Values {
+				if len(v) == 2 {
+					timestamp, ok1 := v[0].(float64)
+					valueStr, ok2 := v[1].(string)
+					if ok1 && ok2 {
+						value, err := strconv.ParseFloat(valueStr, 64)
+						if err == nil {
+							values = append(values, [2]float64{timestamp, value})
+						}
+					}
+				}
+			}
+
+			result = append(result, map[string]interface{}{
+				"metric": r.Metric,
+				"values": values,
+			})
+		}
+	}
+
+	s.writeJSON(w, http.StatusOK, map[string]interface{}{
+		"data": result,
+	})
+}
+
+// handleExportTimeseries 导出时序数据为 CSV
+func (s *Server) handleExportTimeseries(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Metrics []string `json:"metrics"`
+		Start   string   `json:"start"`
+		End     string   `json:"end"`
+		Step    string   `json:"step"`
+	}
+
+	// 从查询参数解析
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		// 如果是 GET 请求，尝试从 URL 参数解析
+		req.Metrics = r.URL.Query()["metric"]
+		req.Start = r.URL.Query().Get("start")
+		req.End = r.URL.Query().Get("end")
+		req.Step = r.URL.Query().Get("step")
+	}
+
+	if len(req.Metrics) == 0 {
+		s.writeError(w, http.StatusBadRequest, "metrics 不能为空")
+		return
+	}
+
+	// 设置 CSV 响应头
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=metrics-%d.csv", time.Now().Unix()))
+
+	// 查询数据并生成 CSV
+	// 这里可以复用 handleQueryTimeseries 的逻辑
+	// 为了简化，我们先实现一个简单版本
+
+	// TODO: 实现完整的导出逻辑
+	w.Write([]byte("timestamp,metric,value\n"))
+}
+
+// min 返回两个整数中的较小值
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+// parseTimeToUnix 解析时间字符串为 Unix 时间戳
+// 支持格式：
+//   - "now" -> 当前时间
+//   - "-1h" -> 1小时前
+//   - "-5m" -> 5分钟前
+//   - "-1d" -> 1天前
+//   - Unix时间戳 (如 "1710374400")
+func parseTimeToUnix(timeStr string) (int64, error) {
+	timeStr = strings.TrimSpace(timeStr)
+
+	// 特殊处理 "now"
+	if timeStr == "now" {
+		return time.Now().Unix(), nil
+	}
+
+	// 处理相对时间 (如 -1h, -5m, -1d)
+	if strings.HasPrefix(timeStr, "-") {
+		now := time.Now()
+		durationStr := timeStr[1:] // 去掉 "-" 前缀
+
+		var duration time.Duration
+		if strings.HasSuffix(durationStr, "s") {
+			// 秒
+			seconds, err := strconv.ParseInt(durationStr[:len(durationStr)-1], 10, 64)
+			if err != nil {
+				return 0, fmt.Errorf("无法解析秒数: %w", err)
+			}
+			duration = time.Duration(seconds) * time.Second
+		} else if strings.HasSuffix(durationStr, "m") {
+			// 分钟
+			minutes, err := strconv.ParseInt(durationStr[:len(durationStr)-1], 10, 64)
+			if err != nil {
+				return 0, fmt.Errorf("无法解析分钟数: %w", err)
+			}
+			duration = time.Duration(minutes) * time.Minute
+		} else if strings.HasSuffix(durationStr, "h") {
+			// 小时
+			hours, err := strconv.ParseInt(durationStr[:len(durationStr)-1], 10, 64)
+			if err != nil {
+				return 0, fmt.Errorf("无法解析小时数: %w", err)
+			}
+			duration = time.Duration(hours) * time.Hour
+		} else if strings.HasSuffix(durationStr, "d") {
+			// 天
+			days, err := strconv.ParseInt(durationStr[:len(durationStr)-1], 10, 64)
+			if err != nil {
+				return 0, fmt.Errorf("无法解析天数: %w", err)
+			}
+			duration = time.Duration(days) * 24 * time.Hour
+		} else {
+			// 默认为秒
+			seconds, err := strconv.ParseInt(durationStr, 10, 64)
+			if err != nil {
+				return 0, fmt.Errorf("无法解析时间: %w", err)
+			}
+			duration = time.Duration(seconds) * time.Second
+		}
+
+		return now.Add(-duration).Unix(), nil
+	}
+
+	// 尝试解析为 Unix 时间戳
+	timestamp, err := strconv.ParseInt(timeStr, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("无法解析时间戳: %w", err)
+	}
+	return timestamp, nil
 }

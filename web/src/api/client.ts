@@ -227,4 +227,45 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ channel, webhook, secret }),
     }),
+
+  // ===================== 时序数据查询 API =====================
+  listAvailableMetrics: () => request<string[]>('/timeseries/metrics'),
+
+  queryTimeseries: (params: {
+    metrics: string[]
+    start: string
+    end?: string
+    step?: string
+  }) =>
+    request<{
+      data: Array<{
+        metric: Record<string, string>
+        values: [number, number][]
+      }>
+    }>('/timeseries/query', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    }),
+
+  exportTimeseries: (params: {
+    metrics: string[]
+    start: string
+    end?: string
+    step?: string
+  }) => {
+    const queryParts: string[] = []
+    params.metrics.forEach(m => queryParts.push(`metric=${encodeURIComponent(m)}`))
+    queryParts.push(`start=${encodeURIComponent(params.start)}`)
+    if (params.end) queryParts.push(`end=${encodeURIComponent(params.end)}`)
+    if (params.step) queryParts.push(`step=${encodeURIComponent(params.step)}`)
+
+    const queryString = queryParts.join('&')
+
+    return fetch(`/api/timeseries/export?${queryString}`).then(resp => {
+      if (!resp.ok) {
+        throw new Error(`导出失败: ${resp.statusText}`)
+      }
+      return resp.blob()
+    })
+  },
 }

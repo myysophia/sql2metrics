@@ -47,34 +47,26 @@ func (n *WeChatNotifier) SendNotification(notification AlertNotification) error 
 
 	log.Printf("[NOTIFIER-WECHAT] 准备发送通知: %s (状态: %s)", notification.AlertName, notification.Status)
 
-	// Build message content
+	// Build message content - always use text type to support @mentions
 	var content string
-	var msgType string
 	if notification.Status == "firing" {
-		msgType = "markdown"
-		content = n.buildFiringMarkdown(notification)
+		content = n.buildFiringText(notification)
 	} else {
-		msgType = "text"
 		content = n.buildResolvedText(notification)
 	}
 
-	// Build message
-	msg := weChatMessage{MsgType: msgType}
-
-	if msgType == "markdown" {
-		msg.Markdown = &struct {
-			Content string `json:"content"`
-		}{Content: content}
-	} else {
-		msg.Text = &struct {
+	// Build message with text type (required for mentioned_list to work)
+	msg := weChatMessage{
+		MsgType: "text",
+		Text: &struct {
 			Content             string   `json:"content"`
-			MentionedList      []string `json:"mentioned_list,omitempty"`
+			MentionedList       []string `json:"mentioned_list,omitempty"`
 			MentionedMobileList []string `json:"mentioned_mobile_list,omitempty"`
 		}{
 			Content:             content,
 			MentionedList:       n.config.MentionedList,
 			MentionedMobileList: n.config.MentionedMobileList,
-		}
+		},
 	}
 
 	// Marshal to JSON
@@ -113,45 +105,43 @@ func (n *WeChatNotifier) SendNotification(notification AlertNotification) error 
 	return nil
 }
 
-// buildFiringMarkdown builds markdown content for firing alerts
-func (n *WeChatNotifier) buildFiringMarkdown(notification AlertNotification) string {
-	var md string
-	md += fmt.Sprintf("# 🚨 告警通知\n\n")
-	md += fmt.Sprintf("**告警名称**: %s\n\n", notification.AlertName)
-	md += fmt.Sprintf("**当前值**: %.2f\n\n", notification.Value)
+// buildFiringText builds text content for firing alerts
+func (n *WeChatNotifier) buildFiringText(notification AlertNotification) string {
+	var content string
+	content += fmt.Sprintf("🚨 告警通知\n\n")
+	content += fmt.Sprintf("告警名称: %s\n", notification.AlertName)
+	content += fmt.Sprintf("当前值: %.2f\n", notification.Value)
 
 	// Add duration if available
 	if notification.Duration != "" {
-		md += fmt.Sprintf("**持续时间要求**: %s\n\n", notification.Duration)
+		content += fmt.Sprintf("持续时间要求: %s\n", notification.Duration)
 	}
 
 	// Add labels
 	if len(notification.Labels) > 0 {
-		md += "**标签**:\n"
+		content += "\n标签:\n"
 		for k, v := range notification.Labels {
-			md += fmt.Sprintf("- %s: %s\n", k, v)
+			content += fmt.Sprintf("- %s: %s\n", k, v)
 		}
-		md += "\n"
 	}
 
 	// Add annotations (message)
 	if len(notification.Annotations) > 0 {
 		for k, v := range notification.Annotations {
-			md += fmt.Sprintf("**%s**: %s\n", k, v)
+			content += fmt.Sprintf("%s: %s\n", k, v)
 		}
-		md += "\n"
 	}
 
-	md += fmt.Sprintf("**开始时间**: %s\n", notification.StartsAt.Format("2006-01-02 15:04:05"))
+	content += fmt.Sprintf("\n开始时间: %s", notification.StartsAt.Format("2006-01-02 15:04:05"))
 
 	if !notification.EndsAt.IsZero() {
-		md += fmt.Sprintf("**结束时间**: %s\n", notification.EndsAt.Format("2006-01-02 15:04:05"))
+		content += fmt.Sprintf("\n结束时间: %s", notification.EndsAt.Format("2006-01-02 15:04:05"))
 	}
 
 	// Add call to action
-	md += "\n请相关人员处理"
+	content += "\n\n请相关人员处理"
 
-	return md
+	return content
 }
 
 // buildResolvedText builds text content for resolved alerts

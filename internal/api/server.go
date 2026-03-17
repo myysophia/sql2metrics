@@ -124,6 +124,13 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.handleUpdateNotifierConfig(w, r)
 	case path == "/api/notifier/test" && r.Method == "POST":
 		s.handleTestNotifierWebhook(w, r)
+	// Timeseries query routes
+	case path == "/api/timeseries/metrics" && r.Method == "GET":
+		s.handleListAvailableMetrics(w, r)
+	case path == "/api/timeseries/query" && r.Method == "POST":
+		s.handleQueryTimeseries(w, r)
+	case path == "/api/timeseries/export" && r.Method == "GET":
+		s.handleExportTimeseries(w, r)
 	// Data source connection routes
 	case strings.HasPrefix(path, "/api/datasource/mysql/") && r.Method == "PUT":
 		s.handleDataSourceRoute(w, r, s.handleUpdateMySQLConnection)

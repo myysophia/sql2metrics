@@ -44,6 +44,9 @@ type ScheduleConfig struct {
 type PrometheusConfig struct {
 	ListenAddress string `yaml:"listen_address" json:"listen_address"`
 	ListenPort    int    `yaml:"listen_port" json:"listen_port"`
+	// URL 用于查询外部 Prometheus，如 http://116.62.234.45:32090
+	// 如果为空，则使用 ListenAddress:ListenPort
+	URL string `yaml:"url,omitempty" json:"url,omitempty"`
 }
 
 // AlertmanagerConfig 定义 Alertmanager 告警推送配置。
