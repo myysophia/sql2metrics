@@ -2,6 +2,7 @@ package collectors
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"math"
@@ -24,6 +25,7 @@ type Service struct {
 	mysql           map[string]*datasource.MySQLClient
 	redis           map[string]*datasource.RedisClient
 	iotdb           *datasource.IoTDBClient
+	restapi         map[string]*datasource.RestAPIClient
 	metrics         []metricHolder
 	errorCount      prometheus.Counter
 	lastRun         prometheus.Gauge
@@ -45,6 +47,7 @@ func NewService(cfg *config.Config) (*Service, error) {
 		cfg:           cfg,
 		mysql:         make(map[string]*datasource.MySQLClient),
 		redis:         make(map[string]*datasource.RedisClient),
+		restapi:       make(map[string]*datasource.RestAPIClient),
 		registry:      prometheus.NewRegistry(),
 		currentValues: make(map[string]float64),
 	}
@@ -89,6 +92,20 @@ func NewService(cfg *config.Config) (*Service, error) {
 		}
 	}
 
+	// 初始化 RestAPI 连接（失败时只记录警告，不阻止服务启动）
+	for connName := range restapiConnectionsNeeded(cfg) {
+		restapiCfg, ok := cfg.RestAPIConfigFor(connName)
+		if !ok {
+			log.Printf("警告: 未找到 RestAPI 连接配置 %s，相关指标将无法采集", connName)
+			continue
+		}
+		client, err := datasource.NewRestAPIClient(restapiCfg)
+		if err != nil {
+			log.Printf("警告: RestAPI 连接 %s 失败，相关指标将无法采集: %v", connName, err)
+		} else {
+			svc.restapi[connName] = client
+		}
+	}
 	for _, spec := range cfg.Metrics {
 		metricType := spec.Type
 		if metricType == "" {
@@ -158,9 +175,9 @@ func NewService(cfg *config.Config) (*Service, error) {
 	svc.registry.MustRegister(svc.errorCount, svc.lastRun)
 
 	// 同时注册到默认注册表以保持兼容性
-	prometheus.MustRegister(svc.errorCount, svc.lastRun)
+	prometheus.DefaultRegisterer.MustRegister(svc.errorCount, svc.lastRun)
 	for _, holder := range svc.metrics {
-		prometheus.MustRegister(holder.gauge)
+		prometheus.DefaultRegisterer.MustRegister(holder.gauge)
 	}
 
 	return svc, nil
@@ -194,6 +211,21 @@ func redisConnectionsNeeded(cfg *config.Config) map[string]struct{} {
 	required := make(map[string]struct{})
 	for _, m := range cfg.Metrics {
 		if m.Source != "redis" {
+			continue
+		}
+		name := m.Connection
+		if name == "" {
+			name = "default"
+		}
+		required[name] = struct{}{}
+	}
+	return required
+}
+
+func restapiConnectionsNeeded(cfg *config.Config) map[string]struct{} {
+	required := make(map[string]struct{})
+	for _, m := range cfg.Metrics {
+		if m.Source != "restapi" {
 			continue
 		}
 		name := m.Connection
@@ -296,6 +328,17 @@ func (s *Service) queryMetric(ctx context.Context, spec config.MetricSpec) (floa
 		}
 		log.Printf("执行 Redis 命令（连接=%s）: %s", conn, spec.Query)
 		return client.QueryScalar(ctx, spec.Query)
+	case "restapi":
+		conn := spec.Connection
+		if conn == "" {
+			conn = "default"
+		}
+		client, ok := s.restapi[conn]
+		if !ok {
+			return 0, fmt.Errorf("RestAPI 连接 %s 未初始化", conn)
+		}
+		log.Printf("执行 RestAPI 查询（连接=%s）: %s", conn, spec.Query)
+		return client.QueryScalar(ctx, spec.Query, spec.ResultField)
 	default:
 		return 0, ErrDataSourceUnavailable(spec.Source)
 	}
@@ -328,15 +371,22 @@ func (s *Service) Close() {
 			log.Printf("关闭 IoTDB 连接失败: %v", err)
 		}
 	}
+	if s.restapi != nil {
+		for name, client := range s.restapi {
+			if err := client.Close(); err != nil {
+				log.Printf("关闭 RestAPI 连接 %s 失败: %v", name, err)
+			}
+		}
+	}
 	if s.registry != nil {
 		for _, holder := range s.metrics {
 			s.registry.Unregister(holder.gauge)
-			prometheus.Unregister(holder.gauge)
+			prometheus.DefaultRegisterer.Unregister(holder.gauge)
 		}
 		s.registry.Unregister(s.errorCount)
 		s.registry.Unregister(s.lastRun)
-		prometheus.Unregister(s.errorCount)
-		prometheus.Unregister(s.lastRun)
+			prometheus.DefaultRegisterer.Unregister(s.errorCount)
+			prometheus.DefaultRegisterer.Unregister(s.lastRun)
 	}
 }
 
@@ -427,7 +477,7 @@ func (s *Service) ReloadConfig(newCfg *config.Config) ReloadResult {
 	for _, holder := range s.metrics {
 		if !newMetricNames[holder.spec.Name] {
 			s.registry.Unregister(holder.gauge)
-			prometheus.Unregister(holder.gauge)
+			prometheus.DefaultRegisterer.Unregister(holder.gauge)
 		}
 	}
 
@@ -439,9 +489,14 @@ func (s *Service) ReloadConfig(newCfg *config.Config) ReloadResult {
 	for name := range s.redis {
 		oldRedisConnections[name] = true
 	}
+	oldRestAPIConnections := make(map[string]bool)
+	for name := range s.restapi {
+		oldRestAPIConnections[name] = true
+	}
 
 	newMySQLConnections := mysqlConnectionsNeeded(newCfg)
 	newRedisConnections := redisConnectionsNeeded(newCfg)
+	newRestAPIConnections := restapiConnectionsNeeded(newCfg)
 
 	for name := range oldMySQLConnections {
 		if _, needed := newMySQLConnections[name]; !needed {
@@ -456,6 +511,14 @@ func (s *Service) ReloadConfig(newCfg *config.Config) ReloadResult {
 			if client, ok := s.redis[name]; ok {
 				client.Close()
 				delete(s.redis, name)
+			}
+		}
+	}
+	for name := range oldRestAPIConnections {
+		if _, needed := newRestAPIConnections[name]; !needed {
+			if client, ok := s.restapi[name]; ok {
+				client.Close()
+				delete(s.restapi, name)
 			}
 		}
 	}
@@ -550,6 +613,43 @@ func (s *Service) ReloadConfig(newCfg *config.Config) ReloadResult {
 		}
 	}
 
+	for connName := range newRestAPIConnections {
+		restapiCfg, ok := newCfg.RestAPIConfigFor(connName)
+		if !ok {
+			return ReloadResult{
+				Success: false,
+				Error:   fmt.Sprintf("未找到 RestAPI 连接 %s", connName),
+				Message: "热更新失败",
+			}
+		}
+
+		if client, exists := s.restapi[connName]; exists {
+			var oldRestAPI config.RestAPIConfig
+			var hasOld bool
+			if oldCfg != nil {
+				oldRestAPI, hasOld = oldCfg.RestAPIConfigFor(connName)
+			}
+			if !hasOld || !restapiConfigEqual(oldRestAPI, restapiCfg) {
+				log.Printf("检测到 RestAPI 连接 %s 配置变更，准备重建连接", connName)
+				_ = client.Close()
+				delete(s.restapi, connName)
+				exists = false
+			}
+		}
+
+		if _, exists := s.restapi[connName]; !exists {
+			client, err := datasource.NewRestAPIClient(restapiCfg)
+			if err != nil {
+				return ReloadResult{
+					Success: false,
+					Error:   fmt.Sprintf("初始化 RestAPI 连接 %s 失败: %v", connName, err),
+					Message: "热更新失败",
+				}
+			}
+			s.restapi[connName] = client
+		}
+	}
+
 	var newMetrics []string
 	var updatedMetrics []metricHolder
 
@@ -568,9 +668,10 @@ func (s *Service) ReloadConfig(newCfg *config.Config) ReloadResult {
 		}
 
 		if existingHolder != nil {
-			if existingHolder.spec.Type != spec.Type || !labelsEqual(existingHolder.spec.Labels, spec.Labels) {
+			if existingHolder.spec.Type != spec.Type || existingHolder.spec.Help != spec.Help || !labelsEqual(existingHolder.spec.Labels, spec.Labels) {
+				// 从两个注册表清理旧 metric
 				s.registry.Unregister(existingHolder.gauge)
-				prometheus.Unregister(existingHolder.gauge)
+				prometheus.DefaultRegisterer.Unregister(existingHolder.gauge)
 
 				var metric prometheus.Collector
 				switch metricType {
@@ -610,18 +711,32 @@ func (s *Service) ReloadConfig(newCfg *config.Config) ReloadResult {
 					})
 				}
 
+				// 注册到自定义注册表，处理 AlreadyRegisteredError
 				if err := s.registry.Register(metric); err != nil {
-					return ReloadResult{
-						Success: false,
-						Error:   fmt.Sprintf("注册指标 %s 失败: %v", spec.Name, err),
-						Message: "热更新失败",
+					var alreadyErr prometheus.AlreadyRegisteredError
+					if errors.As(err, &alreadyErr) {
+						s.registry.Unregister(alreadyErr.ExistingCollector)
+						if retryErr := s.registry.Register(metric); retryErr != nil {
+							return ReloadResult{
+								Success: false,
+								Error:   fmt.Sprintf("注册指标 %s 失败（重试后）: %v", spec.Name, retryErr),
+								Message: "热更新失败",
+							}
+						}
+					} else {
+						return ReloadResult{
+							Success: false,
+							Error:   fmt.Sprintf("注册指标 %s 失败: %v", spec.Name, err),
+							Message: "热更新失败",
+						}
 					}
 				}
 
 				if gauge, ok := metric.(prometheus.Gauge); ok {
 					existingHolder.gauge = gauge
 					existingHolder.spec = spec
-					prometheus.MustRegister(gauge)
+					prometheus.DefaultRegisterer.Unregister(existingHolder.gauge)
+					prometheus.DefaultRegisterer.MustRegister(gauge)
 				}
 			} else {
 				existingHolder.spec = spec
@@ -680,7 +795,7 @@ func (s *Service) ReloadConfig(newCfg *config.Config) ReloadResult {
 					gauge: gauge,
 				}
 				updatedMetrics = append(updatedMetrics, holder)
-				prometheus.MustRegister(gauge)
+				prometheus.DefaultRegisterer.MustRegister(gauge)
 				newMetrics = append(newMetrics, spec.Name)
 			}
 		}
@@ -731,4 +846,12 @@ func redisConfigEqual(a, b config.RedisConfig) bool {
 		a.DB == b.DB &&
 		a.EnableTLS == b.EnableTLS &&
 		a.SkipTLSVerify == b.SkipTLSVerify
+}
+
+func restapiConfigEqual(a, b config.RestAPIConfig) bool {
+	return a.BaseURL == b.BaseURL &&
+		a.Timeout == b.Timeout &&
+		a.TLS.SkipVerify == b.TLS.SkipVerify &&
+		a.Retry.MaxAttempts == b.Retry.MaxAttempts &&
+		a.Retry.Backoff == b.Retry.Backoff
 }

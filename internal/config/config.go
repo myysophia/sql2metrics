@@ -59,7 +59,10 @@ type NotifierConfig struct {
 	// Enable built-in alertmanager (if false, use external Alertmanager)
 	Enabled bool `yaml:"enabled" json:"enabled"`
 
-	// Notification channels
+	// Enable new routing system (default: false for backward compatibility)
+	EnableRouting bool `yaml:"enable_routing,omitempty" json:"enable_routing,omitempty"`
+
+	// Notification channels (legacy)
 	WeChat   *WeChatNotifierConfig   `yaml:"wechat,omitempty" json:"wechat,omitempty"`
 	DingTalk *DingTalkNotifierConfig `yaml:"dingtalk,omitempty" json:"dingtalk,omitempty"`
 	Feishu   *FeishuNotifierConfig   `yaml:"feishu,omitempty" json:"feishu,omitempty"`
@@ -313,7 +316,12 @@ func (c *Config) Validate() error {
 			return fmt.Errorf("Redis 连接 %s 使用的模式暂未支持: %s", name, mode)
 		}
 	}
+	metricNames := make(map[string]bool)
 	for _, m := range c.Metrics {
+		if metricNames[m.Name] {
+			return fmt.Errorf("指标名称 %q 重复定义", m.Name)
+		}
+		metricNames[m.Name] = true
 		if m.Name == "" {
 			return errors.New("指标名称不能为空")
 		}
