@@ -18,6 +18,7 @@ import (
 	"github.com/company/ems-devices/internal/collectors"
 	"github.com/company/ems-devices/internal/config"
 	"github.com/company/ems-devices/internal/notifier"
+	"github.com/company/ems-devices/internal/routes"
 )
 
 func main() {
@@ -89,7 +90,7 @@ func main() {
 	if cfg.Notifier.Enabled {
 		log.Printf("[NOTIFIER] 初始化内置告警通知服务...")
 		notifierCfg := notifier.FromConfig(&cfg.Notifier)
-		notifierMgr := notifier.NewManager(notifierCfg)
+		notifierMgr := notifier.NewLegacyManager(notifierCfg)
 		alertEvaluator.SetNotifier(notifierMgr)
 		log.Printf("[NOTIFIER] 内置告警通知服务已启用，仅使用内置通知发送告警")
 	}
@@ -106,7 +107,17 @@ func main() {
 	// 设置告警 API handler
 	alertHandler := alerts.NewHandler(alertStorage, alertHistory, alertEvaluator)
 	apiServer.SetAlertHandler(alertHandler)
-	
+
+	// 初始化路由管理器
+	routeStorage := routes.NewRouteStorage("data/routes.json")
+	if err := routeStorage.Load(); err != nil {
+		log.Printf("[ROUTE] 加载路由配置失败: %v", err)
+	}
+	routeMgr := routes.NewManager(routeStorage)
+	routeHandler := routes.NewHandler(routeStorage, routeMgr)
+	apiServer.SetRouteHandler(routeHandler)
+	log.Printf("[ROUTE] 路由管理器已初始化")
+
 	server := &http.Server{
 		Addr:    cfg.Prometheus.ListenAddr(),
 		Handler: apiServer,

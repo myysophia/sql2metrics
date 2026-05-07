@@ -14,8 +14,9 @@ import (
 // Manager is the built-in alertmanager that handles alert routing, grouping, deduplication, and suppression
 type Manager struct {
 	config *NotifierConfig
+	router *Router // Router for intelligent notification routing
 
-	// Notifiers
+	// Notifiers (legacy, kept for backward compatibility)
 	wechat   *WeChatNotifier
 	dingtalk *DingTalkNotifier
 	feishu   *FeishuNotifier
@@ -52,11 +53,12 @@ type AlertHistory struct {
 }
 
 // NewManager creates a new built-in alertmanager
-func NewManager(config *NotifierConfig) *Manager {
+func NewManager(config *NotifierConfig, router *Router) *Manager {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	mgr := &Manager{
 		config:            config,
+		router:            router,
 		alertChan:         make(chan alerts.Alert, 100),
 		pendingAlerts:     make(map[string]*PendingAlert),
 		alertHistory:      make(map[string]*AlertHistory),
@@ -65,24 +67,29 @@ func NewManager(config *NotifierConfig) *Manager {
 		cancel:            cancel,
 	}
 
-	// Initialize notifiers
+	// Initialize legacy notifiers for backward compatibility
 	if config.WeChat != nil && config.WeChat.Enabled {
 		mgr.wechat = NewWeChatNotifier(config.WeChat)
-		log.Printf("[NOTIFIER] 企业微信通知已启用")
+		log.Printf("[NOTIFIER] 企业微信通知已启用 (legacy)")
 	}
 	if config.DingTalk != nil && config.DingTalk.Enabled {
 		mgr.dingtalk = NewDingTalkNotifier(config.DingTalk)
-		log.Printf("[NOTIFIER] 钉钉通知已启用")
+		log.Printf("[NOTIFIER] 钉钉通知已启用 (legacy)")
 	}
 	if config.Feishu != nil && config.Feishu.Enabled {
 		mgr.feishu = NewFeishuNotifier(config.Feishu)
-		log.Printf("[NOTIFIER] 飞书通知已启用")
+		log.Printf("[NOTIFIER] 飞书通知已启用 (legacy)")
 	}
 
 	// Start processing goroutine
 	go mgr.processAlerts()
 
 	return mgr
+}
+
+// NewLegacyManager creates a manager without router (for backward compatibility)
+func NewLegacyManager(config *NotifierConfig) *Manager {
+	return NewManager(config, nil)
 }
 
 // SendAlert sends an alert to the built-in alertmanager
@@ -106,8 +113,7 @@ func (m *Manager) SendResolved(alert alerts.Alert) error {
 	delete(m.alertHistory, alert.RuleID)
 	m.mu.Unlock()
 
-	// Send resolved notification
-	m.sendToAllChannels(AlertNotification{
+	notification := AlertNotification{
 		AlertName:   alert.RuleName,
 		Status:      "resolved",
 		Labels:      alert.Labels,
@@ -116,7 +122,22 @@ func (m *Manager) SendResolved(alert alerts.Alert) error {
 		EndsAt:      alert.EndsAt,
 		Value:       alert.Value,
 		Duration:    alert.Duration,
-	})
+	}
+
+	// Use router if available, otherwise use legacy method
+	if m.router != nil {
+		results := m.router.SendNotification(context.Background(), alert, notification)
+		// Log results
+		for _, result := range results {
+			if result.Success {
+				log.Printf("[NOTIFIER] ✅ %s 通知发送成功", result.Channel)
+			} else {
+				log.Printf("[NOTIFIER] ❌ %s 通知发送失败: %s", result.Channel, result.Error)
+			}
+		}
+	} else {
+		m.sendToAllChannelsLegacy(notification)
+	}
 
 	return nil
 }
@@ -246,11 +267,24 @@ func (m *Manager) sendGroupNotification(pending *PendingAlert) {
 		notification.Annotations["group_members"] = m.getAlertNames(pending.Alerts)
 	}
 
-	m.sendToAllChannels(notification)
+	// Use router if available, otherwise use legacy method
+	if m.router != nil {
+		results := m.router.SendNotification(context.Background(), representative, notification)
+		// Log results
+		for _, result := range results {
+			if result.Success {
+				log.Printf("[NOTIFIER] ✅ %s 通知发送成功", result.Channel)
+			} else {
+				log.Printf("[NOTIFIER] ❌ %s 通知发送失败: %s", result.Channel, result.Error)
+			}
+		}
+	} else {
+		m.sendToAllChannelsLegacy(notification)
+	}
 }
 
-// sendToAllChannels sends notification to all enabled channels
-func (m *Manager) sendToAllChannels(notification AlertNotification) {
+// sendToAllChannelsLegacy sends notification to all enabled channels (legacy method)
+func (m *Manager) sendToAllChannelsLegacy(notification AlertNotification) {
 	results := make([]NotificationResult, 0)
 
 	// WeChat

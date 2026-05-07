@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useToast } from '@/hooks/use-toast'
 import { api } from '@/api/client'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -7,11 +8,12 @@ import { Switch } from '@/components/ui/switch'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
-import { Loader2, CheckCircle2, XCircle, Send } from 'lucide-react'
+import { Loader2, CheckCircle2, XCircle, Send, ArrowRight, Rocket } from 'lucide-react'
 import type { NotifierConfig, WeChatNotifierConfig, DingTalkNotifierConfig, FeishuNotifierConfig } from '@/types/config'
 
 export default function NotificationSettings() {
   const { toast } = useToast()
+  const navigate = useNavigate()
   const [config, setConfig] = useState<NotifierConfig | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -150,6 +152,32 @@ export default function NotificationSettings() {
         </CardContent>
       </Card>
 
+      {/* 顶部横幅：引导到高级路由 */}
+      <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
+        <CardContent className="pt-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-blue-100 rounded-lg">
+                <Rocket className="h-6 w-6 text-blue-600" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-blue-900 text-lg">升级到智能路由系统</h3>
+                <p className="text-sm text-blue-700 mt-1">
+                  支持多渠道分发、基于标签和严重级别的智能路由、20+ 个 webhook 管理
+                </p>
+              </div>
+            </div>
+            <Button
+              onClick={() => navigate('/routes')}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              前往告警路由
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* 分组设置 */}
       {config.enabled && (
         <>
@@ -237,6 +265,30 @@ export default function NotificationSettings() {
             onTest={(webhook) => testWebhook('feishu', webhook)}
             testing={testing === 'feishu'}
           />
+
+          {/* 底部提示：详细功能介绍 */}
+          <Card className="border-dashed bg-muted/50">
+            <CardContent className="pt-6">
+              <div className="flex items-start gap-4">
+                <div className="text-4xl">💡</div>
+                <div className="flex-1">
+                  <h3 className="font-semibold mb-2">需要更强大的路由功能？</h3>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    告警路由系统支持：
+                  </p>
+                  <ul className="text-sm text-muted-foreground space-y-1 mb-4">
+                    <li>• 配置 20+ 个不同的通知渠道</li>
+                    <li>• 基于严重级别的智能分发</li>
+                    <li>• 同一告警发送到多个群</li>
+                    <li>• 按标签、告警名称灵活路由</li>
+                  </ul>
+                  <Button onClick={() => navigate('/routes')}>
+                    前往告警路由管理
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </>
       )}
     </div>

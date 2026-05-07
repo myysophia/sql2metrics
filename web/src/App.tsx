@@ -7,6 +7,8 @@ import Alerts from './pages/Alerts'
 import AlertDetail from './pages/AlertDetail'
 import Settings from './pages/Settings'
 import NotificationSettings from './pages/NotificationSettings'
+import RouteManagement from './pages/RouteManagement'
+import AIChat from './pages/AIChat'
 
 function App() {
   return (
@@ -20,6 +22,8 @@ function App() {
         <Route path="/alerts/:id" element={<AlertDetail />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/notifications" element={<NotificationSettings />} />
+        <Route path="/routes" element={<RouteManagement />} />
+        <Route path="/ai-chat" element={<AIChat />} />
       </Routes>
     </Layout>
   )

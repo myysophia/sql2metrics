@@ -1,6 +1,6 @@
 import { Link, useLocation } from 'react-router-dom'
 import { ReactNode } from 'react'
-import { LayoutDashboard, Database, LineChart, Settings, Bell, MessageSquare } from 'lucide-react'
+import { LayoutDashboard, Database, LineChart, Settings, Bell, MessageSquare, Route, Sparkles } from 'lucide-react'
 import { Toaster } from '@/components/ui/toaster'
 import { cn } from '@/lib/utils'
 
@@ -14,6 +14,8 @@ const navItems = [
   { path: '/metrics', label: '指标', icon: LineChart },
   { path: '/alerts', label: '告警', icon: Bell },
   { path: '/notifications', label: '通知设置', icon: MessageSquare },
+  { path: '/routes', label: '告警路由', icon: Route },
+  { path: '/ai-chat', label: 'AI 助手', icon: Sparkles },
   { path: '/settings', label: '设置', icon: Settings },
 ]
 
