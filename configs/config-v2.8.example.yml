@@ -1,0 +1,193 @@
+schedule:
+  interval: 5m
+
+prometheus:
+  listen_address: 0.0.0.0
+  listen_port: 18888
+  url: https://prometheus-cn.vnnox.com
+
+alertmanager:
+  url: https://cn-alertmanager.vnnox.com
+
+notifier:
+  enabled: true
+  wechat:
+    enabled: true
+    webhook: https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR_WEBHOOK_KEY
+    mentioned_list:
+      - '@your_mention_id'
+  dingtalk:
+    enabled: false
+    webhook: https://oapi.dingtalk.com/robot/send?access_token=YOUR_TOKEN
+    secret: YOUR_SECRET
+  feishu:
+    enabled: false
+    webhook: https://open.feishu.cn/open-apis/bot/v2/hook/YOUR_HOOK
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 2h
+
+mysql:
+  host: mysql.internal
+  port: 3306
+  user: admin
+  password: ${MYSQL_PASS}
+  database: nova_energy
+  params:
+    charset: utf8mb4
+    parseTime: "true"
+
+mysql_connections:
+  default:
+    host: mysql.internal
+    port: 3306
+    user: admin
+    password: ${MYSQL_PASS}
+    database: nova_energy
+    params:
+      charset: utf8mb4
+      parseTime: "true"
+  business:
+    host: mysql.internal
+    port: 3306
+    user: admin
+    password: ${MYSQL_PASS}
+    database: nova_energy_cloud
+    params:
+      charset: utf8mb4
+      parseTime: "true"
+
+redis:
+  mode: standalone
+  addr: redis.internal:6379
+  username: ""
+  password: ${REDIS_PASS}
+  db: 0
+  enable_tls: false
+  skip_tls_verify: false
+
+redis_connections: {}
+
+restapi_connections:
+  ems:
+    base_url: http://your-api-server:9098/api/v1/fc/invocations?function=PSC&minutes=600&region=cn-hangzhou&timezone=Asia/Shanghai
+    timeout: 30s
+    headers: {}
+    tls:
+      skip_verify: false
+    retry:
+      max_attempts: 0
+      backoff: ""
+  bbd-mineru:
+    base_url: http://your-api-server:9098/api/v1/fc/invocations?function=mineru&minutes=600&region=cn-hangzhou&timezone=Asia/Shanghai
+    timeout: 30s
+    headers: {}
+    tls:
+      skip_verify: false
+    retry:
+      max_attempts: 0
+      backoff: ""
+
+iotdb:
+  host: iotdb.internal
+  port: 6667
+  user: root
+  password: ${IOTDB_PASS}
+  fetch_size: 1024
+  zone_id: UTC+08:00
+  enable_tls: false
+  enable_zstd: false
+  session_pool: 0
+
+metrics:
+  - name: energy_household_total
+    help: 户储设备总量
+    type: gauge
+    source: mysql
+    query: >
+      SELECT COUNT(1) FROM equipment_equipment
+    labels:
+      category: residential
+      region: au
+    enabled: true
+
+  - name: energy_household_online
+    help: 户储在线设备总量
+    type: gauge
+    source: mysql
+    query: >
+      SELECT COUNT(1) FROM equipment_equipment WHERE online_status = 2
+    labels:
+      category: residential
+      region: au
+      status: online
+    enabled: true
+
+  - name: energy_business_total
+    help: 工商业储能设备数
+    type: gauge
+    source: mysql
+    query: >
+      SELECT COUNT(1) FROM station_device
+    connection: business
+    labels:
+      category: commercial
+      region: au
+    enabled: true
+
+  - name: energy_business_reporting
+    help: 工商业储能上报设备数
+    type: gauge
+    source: iotdb
+    query: >
+      COUNT NODES root.energy.sn*.** LEVEL=2
+    labels:
+      category: commercial
+      region: au
+      status: reporting
+    result_field: count(nodes)
+    enabled: true
+
+  - name: emsau_PVPower
+    help: 天青设备PVPower
+    type: gauge
+    source: iotdb
+    query: select count(PVPower) from root.emsplus.sn848ff292896b76.EMS where time>=now()-1800000
+    labels: {}
+    enabled: true
+
+  - name: ems_psc
+    help: 光储配置方案调用次数
+    type: gauge
+    source: restapi
+    query: ""
+    labels:
+      env: uat
+      region: cn-hangzhou
+    result_field: data.value
+    connection: ems
+    enabled: true
+
+  - name: ems_psc_au
+    help: 光储配置方案调用次数(AU)
+    type: gauge
+    source: restapi
+    query: ""
+    labels:
+      env: prod
+      region: eu-central-1
+    result_field: data.value
+    connection: ems-au
+    enabled: true
+
+  - name: bbd_mineru
+    help: mineru 调用情况
+    type: gauge
+    source: restapi
+    query: ""
+    labels:
+      env: prod
+      region: ch-hangzhou
+    result_field: data.value
+    connection: bbd-mineru
+    enabled: true
