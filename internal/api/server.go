@@ -1,16 +1,20 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/company/ems-devices/internal/alerts"
 	"github.com/company/ems-devices/internal/collectors"
 	"github.com/company/ems-devices/internal/config"
+	"github.com/company/ems-devices/internal/routes"
 	"github.com/company/ems-devices/web"
 )
 
@@ -19,6 +23,7 @@ type Server struct {
 	configPath    string
 	service       *collectors.Service
 	alertHandler  *alerts.Handler
+	routeHandler  *routes.Handler
 	mu            sync.RWMutex
 	cfg           *config.Config
 }
@@ -38,6 +43,13 @@ func (s *Server) SetAlertHandler(handler *alerts.Handler) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.alertHandler = handler
+}
+
+// SetRouteHandler sets the route handler
+func (s *Server) SetRouteHandler(handler *routes.Handler) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.routeHandler = handler
 }
 
 // ServeHTTP 实现 http.Handler 接口。
@@ -88,6 +100,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.handleUpdateMetricByIndex(w, r)
 	case strings.HasPrefix(path, "/api/metrics/index/") && r.Method == "DELETE":
 		s.handleDeleteMetricByIndex(w, r)
+	case strings.HasPrefix(path, "/api/metrics/index/") && r.Method == "POST" && strings.HasSuffix(path, "/enable"):
+		s.handleEnableMetric(w, r)
+	case strings.HasPrefix(path, "/api/metrics/index/") && r.Method == "POST" && strings.HasSuffix(path, "/disable"):
+		s.handleDisableMetric(w, r)
 	case strings.HasPrefix(path, "/api/metrics/") && r.Method == "GET":
 		s.handleGetMetric(w, r)
 	case strings.HasPrefix(path, "/api/metrics/") && r.Method == "PUT":
@@ -124,6 +140,25 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.handleUpdateNotifierConfig(w, r)
 	case path == "/api/notifier/test" && r.Method == "POST":
 		s.handleTestNotifierWebhook(w, r)
+	// Route management routes
+	case s.routeHandler != nil && path == "/api/routes/channels" && r.Method == "GET":
+		s.routeHandler.ListChannels(w, r)
+	case s.routeHandler != nil && path == "/api/routes/channels" && r.Method == "POST":
+		s.routeHandler.CreateChannel(w, r)
+	case s.routeHandler != nil && strings.HasPrefix(path, "/api/routes/channels/") && r.Method == "PUT":
+		s.routeHandler.UpdateChannel(w, r)
+	case s.routeHandler != nil && strings.HasPrefix(path, "/api/routes/channels/") && r.Method == "DELETE":
+		s.routeHandler.DeleteChannel(w, r)
+	case s.routeHandler != nil && strings.HasSuffix(path, "/test") && strings.HasPrefix(path, "/api/routes/channels/") && r.Method == "POST":
+		s.routeHandler.TestChannel(w, r)
+	case s.routeHandler != nil && path == "/api/routes/rules" && r.Method == "GET":
+		s.routeHandler.ListRoutes(w, r)
+	case s.routeHandler != nil && path == "/api/routes/rules" && r.Method == "POST":
+		s.routeHandler.CreateRoute(w, r)
+	case s.routeHandler != nil && strings.HasPrefix(path, "/api/routes/rules/") && r.Method == "PUT":
+		s.routeHandler.UpdateRoute(w, r)
+	case s.routeHandler != nil && strings.HasPrefix(path, "/api/routes/rules/") && r.Method == "DELETE":
+		s.routeHandler.DeleteRoute(w, r)
 	// Timeseries query routes
 	case path == "/api/timeseries/metrics" && r.Method == "GET":
 		s.handleListAvailableMetrics(w, r)
@@ -131,6 +166,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.handleQueryTimeseries(w, r)
 	case path == "/api/timeseries/export" && r.Method == "GET":
 		s.handleExportTimeseries(w, r)
+	// AI Assistant routes (代理到 Python AI 服务)
+	case path == "/api/ai/chat" && r.Method == "POST":
+		s.forwardToAIService(w, r, "/chat")
+	case path == "/api/ai/chat/stream" && r.Method == "POST":
+		s.forwardToAIServiceStream(w, r, "/chat/stream")
 	// Data source connection routes
 	case strings.HasPrefix(path, "/api/datasource/mysql/") && r.Method == "PUT":
 		s.handleDataSourceRoute(w, r, s.handleUpdateMySQLConnection)
@@ -232,4 +272,155 @@ func (s *Server) handleDataSourceRoute(w http.ResponseWriter, r *http.Request, h
 	}
 	name := parts[4]
 	handler(w, r, name)
+}
+
+// forwardToAIService 转发请求到 Python AI 服务
+func (s *Server) forwardToAIService(w http.ResponseWriter, r *http.Request, path string) {
+	// 从环境变量获取 AI 服务地址
+	aiServiceURL := "http://localhost:8000" // 默认值
+	if envURL := os.Getenv("AI_SERVICE_URL"); envURL != "" {
+		aiServiceURL = envURL
+	}
+
+	// 读取请求体
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		log.Printf("读取请求体失败: %v", err)
+		s.writeError(w, http.StatusBadRequest, "读取请求失败")
+		return
+	}
+
+	// 构建代理请求
+	proxyURL := aiServiceURL + path
+	proxyReq, err := http.NewRequest("POST", proxyURL, bytes.NewReader(body))
+	if err != nil {
+		log.Printf("创建代理请求失败: %v", err)
+		s.writeError(w, http.StatusInternalServerError, "创建代理请求失败")
+		return
+	}
+
+	// 复制原始请求的头
+	proxyReq.Header = r.Header.Clone()
+	proxyReq.Header.Set("Content-Type", "application/json")
+
+	// 发送代理请求
+	client := &http.Client{Timeout: 120 * time.Second} // AI 可能需要更长时间
+	resp, err := client.Do(proxyReq)
+	if err != nil {
+		log.Printf("代理请求失败: %v", err)
+		s.writeError(w, http.StatusBadGateway, "AI 服务不可用")
+		return
+	}
+	defer resp.Body.Close()
+
+	// 读取响应
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("读取响应失败: %v", err)
+		s.writeError(w, http.StatusInternalServerError, "读取响应失败")
+		return
+	}
+
+	// 复制响应头
+	for key, values := range resp.Header {
+		for _, value := range values {
+			w.Header().Add(key, value)
+		}
+	}
+
+	// 返回状态码和响应体
+	w.WriteHeader(resp.StatusCode)
+	w.Write(respBody)
+
+	log.Printf("AI 代理: %s -> %d", path, resp.StatusCode)
+}
+
+// forwardToAIServiceStream 转发流式请求到 Python AI 服务
+func (s *Server) forwardToAIServiceStream(w http.ResponseWriter, r *http.Request, path string) {
+	// 从环境变量获取 AI 服务地址
+	aiServiceURL := "http://localhost:8000" // 默认值
+	if envURL := os.Getenv("AI_SERVICE_URL"); envURL != "" {
+		aiServiceURL = envURL
+	}
+
+	// 读取请求体
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		log.Printf("读取请求体失败: %v", err)
+		s.writeError(w, http.StatusBadRequest, "读取请求失败")
+		return
+	}
+
+	log.Printf("📝 请求体 (%d 字节): %s", len(body), string(body))
+
+	// 构建代理请求
+	proxyURL := aiServiceURL + path
+	proxyReq, err := http.NewRequest("POST", proxyURL, bytes.NewReader(body))
+	if err != nil {
+		log.Printf("创建代理请求失败: %v", err)
+		s.writeError(w, http.StatusInternalServerError, "创建代理请求失败")
+		return
+	}
+
+	// 复制原始请求的头
+	proxyReq.Header = r.Header.Clone()
+	proxyReq.Header.Set("Content-Type", "application/json")
+
+	// 发送代理请求（不设置超时，支持流式传输）
+	log.Printf("🔵 发送代理请求到: %s", proxyURL)
+	transport := &http.Transport{
+		DisableCompression: true,  // 禁用压缩
+		DisableKeepAlives:   false,
+		ForceAttemptHTTP2:   false,
+	}
+	client := &http.Client{
+		Transport: transport,
+		Timeout:   300 * time.Second, // 设置超时避免无限等待
+	}
+	resp, err := client.Do(proxyReq)
+	if err != nil {
+		log.Printf("❌ 代理请求失败: %v", err)
+		s.writeError(w, http.StatusBadGateway, "AI 服务不可用")
+		return
+	}
+	defer resp.Body.Close()
+
+	log.Printf("🟢 收到响应: Status=%d, ContentLength=%d", resp.StatusCode, resp.ContentLength)
+
+	// 设置流式响应头
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	// 检查是否支持 Flusher
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		log.Printf("不支持流式响应")
+		s.writeError(w, http.StatusInternalServerError, "不支持流式响应")
+		return
+	}
+
+	// 流式复制响应体
+	buf := make([]byte, 1024)
+	totalBytes := 0
+	for {
+		n, err := resp.Body.Read(buf)
+		if n > 0 {
+			totalBytes += n
+			w.Write(buf[:n])
+			flusher.Flush() // 立即刷新缓冲区
+			log.Printf("📤 转发 %d 字节 (总计: %d)", n, totalBytes)
+		}
+		if err != nil {
+			if err == io.EOF {
+				log.Printf("✅ 流式转发完成，总计 %d 字节", totalBytes)
+				break
+			}
+			log.Printf("❌ 读取流式响应失败: %v", err)
+			return
+		}
+	}
+
+	log.Printf("AI 代理流式: %s -> %d", path, resp.StatusCode)
 }

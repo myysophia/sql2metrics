@@ -1,4 +1,5 @@
 import type { Config, MetricSpec, MySQLConfig, IoTDBConfig, RedisConfig, RestAPIConfig, ReloadResult, NotifierConfig } from '../types/config'
+import type { NotificationChannel, AlertRoute } from '../types/routes'
 
 const API_BASE = '/api'
 
@@ -110,6 +111,16 @@ export const api = {
   deleteMetricByIndex: (index: number) =>
     request<{ message: string }>(`/metrics/index/${index}`, {
       method: 'DELETE',
+    }),
+
+  enableMetric: (index: number) =>
+    request<MetricSpec>(`/metrics/index/${index}/enable`, {
+      method: 'POST',
+    }),
+
+  disableMetric: (index: number) =>
+    request<MetricSpec>(`/metrics/index/${index}/disable`, {
+      method: 'POST',
     }),
 
   // ===================== 独立数据源 API =====================
@@ -268,4 +279,55 @@ export const api = {
       return resp.blob()
     })
   },
+
+  // ===================== 路由管理 API =====================
+
+  // 通知渠道管理
+  listNotificationChannels: () =>
+    request<{ channels: NotificationChannel[]; total: number }>('/routes/channels')
+      .then(r => r.channels),
+
+  createNotificationChannel: (channel: NotificationChannel) =>
+    request<NotificationChannel>('/routes/channels', {
+      method: 'POST',
+      body: JSON.stringify(channel),
+    }),
+
+  updateNotificationChannel: (id: string, channel: NotificationChannel) =>
+    request<NotificationChannel>(`/routes/channels/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(channel),
+    }),
+
+  deleteNotificationChannel: (id: string) =>
+    request<{ message: string; id: string }>(`/routes/channels/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }),
+
+  testNotificationChannel: (id: string) =>
+    request<{ message: string; channel: string; channel_name: string }>(`/routes/channels/${encodeURIComponent(id)}/test`, {
+      method: 'POST',
+    }),
+
+  // 路由规则管理
+  listAlertRoutes: () =>
+    request<{ routes: AlertRoute[]; total: number }>('/routes/rules')
+      .then(r => r.routes),
+
+  createAlertRoute: (route: AlertRoute) =>
+    request<AlertRoute>('/routes/rules', {
+      method: 'POST',
+      body: JSON.stringify(route),
+    }),
+
+  updateAlertRoute: (id: string, route: AlertRoute) =>
+    request<AlertRoute>(`/routes/rules/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(route),
+    }),
+
+  deleteAlertRoute: (id: string) =>
+    request<{ message: string; id: string }>(`/routes/rules/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }),
 }

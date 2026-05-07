@@ -107,6 +107,9 @@ func NewService(cfg *config.Config) (*Service, error) {
 		}
 	}
 	for _, spec := range cfg.Metrics {
+		if spec.Enabled != nil && !*spec.Enabled {
+			continue
+		}
 		metricType := spec.Type
 		if metricType == "" {
 			metricType = "gauge"
@@ -262,6 +265,9 @@ func (s *Service) execute(ctx context.Context) {
 	log.Printf("开始执行采集周期，共 %d 个指标", len(s.metrics))
 	var success bool
 	for _, holder := range s.metrics {
+		if holder.spec.Enabled != nil && !*holder.spec.Enabled {
+			continue
+		}
 		start := time.Now()
 		log.Printf("开始更新指标 %s (source=%s)", holder.spec.Name, holder.spec.Source)
 		value, err := s.queryMetric(ctx, holder.spec)
@@ -668,6 +674,75 @@ func (s *Service) ReloadConfig(newCfg *config.Config) ReloadResult {
 		}
 
 		if existingHolder != nil {
+			// 处理 enabled 状态变更
+			if (existingHolder.spec.Enabled == nil || *existingHolder.spec.Enabled) && spec.Enabled != nil && !*spec.Enabled {
+				// 禁用指标: 从 Prometheus 注销
+				s.registry.Unregister(existingHolder.gauge)
+				prometheus.DefaultRegisterer.Unregister(existingHolder.gauge)
+				existingHolder.spec = spec
+				continue
+			}
+			if existingHolder.spec.Enabled != nil && !*existingHolder.spec.Enabled && (spec.Enabled == nil || *spec.Enabled) {
+				// 启用指标: 注册到 Prometheus
+				var metric prometheus.Collector
+				switch metricType {
+				case "gauge":
+					metric = prometheus.NewGauge(prometheus.GaugeOpts{
+						Name:        spec.Name,
+						Help:        spec.Help,
+						ConstLabels: spec.Labels,
+					})
+				case "counter":
+					metric = prometheus.NewCounter(prometheus.CounterOpts{
+						Name:        spec.Name,
+						Help:        spec.Help,
+						ConstLabels: spec.Labels,
+					})
+				case "histogram":
+					buckets := spec.Buckets
+					if len(buckets) == 0 {
+						buckets = prometheus.DefBuckets
+					}
+					metric = prometheus.NewHistogram(prometheus.HistogramOpts{
+						Name:        spec.Name,
+						Help:        spec.Help,
+						ConstLabels: spec.Labels,
+						Buckets:     buckets,
+					})
+				case "summary":
+					objectives := spec.Objectives
+					if len(objectives) == 0 {
+						objectives = map[float64]float64{0.5: 0.05, 0.9: 0.01, 0.99: 0.001}
+					}
+					metric = prometheus.NewSummary(prometheus.SummaryOpts{
+						Name:        spec.Name,
+						Help:        spec.Help,
+						ConstLabels: spec.Labels,
+						Objectives:  objectives,
+					})
+				}
+				if err := s.registry.Register(metric); err != nil {
+					var alreadyErr prometheus.AlreadyRegisteredError
+					if errors.As(err, &alreadyErr) {
+						s.registry.Unregister(alreadyErr.ExistingCollector)
+						if retryErr := s.registry.Register(metric); retryErr != nil {
+							log.Printf("启用指标 %s 注册失败（重试后）: %v", spec.Name, retryErr)
+							continue
+						}
+					} else {
+						log.Printf("启用指标 %s 注册失败: %v", spec.Name, err)
+						continue
+					}
+				}
+				if gauge, ok := metric.(prometheus.Gauge); ok {
+					existingHolder.gauge = gauge
+					existingHolder.spec = spec
+					prometheus.DefaultRegisterer.MustRegister(gauge)
+				}
+				updatedMetrics = append(updatedMetrics, *existingHolder)
+				newMetrics = append(newMetrics, spec.Name)
+				continue
+			}
 			if existingHolder.spec.Type != spec.Type || existingHolder.spec.Help != spec.Help || !labelsEqual(existingHolder.spec.Labels, spec.Labels) {
 				// 从两个注册表清理旧 metric
 				s.registry.Unregister(existingHolder.gauge)
@@ -744,6 +819,9 @@ func (s *Service) ReloadConfig(newCfg *config.Config) ReloadResult {
 			updatedMetrics = append(updatedMetrics, *existingHolder)
 		} else {
 			var metric prometheus.Collector
+				if spec.Enabled != nil && !*spec.Enabled {
+				continue
+		}
 			switch metricType {
 			case "gauge":
 				metric = prometheus.NewGauge(prometheus.GaugeOpts{

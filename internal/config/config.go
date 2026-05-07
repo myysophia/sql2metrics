@@ -164,6 +164,7 @@ type MetricSpec struct {
 	Connection  string              `yaml:"connection" json:"connection,omitempty"`
 	Buckets     []float64           `yaml:"buckets,omitempty" json:"buckets,omitempty"` // Histogram 分桶
 	Objectives  map[float64]float64 `yaml:"objectives,omitempty" json:"-"`              // Summary 分位数目标（JSON 序列化通过 ObjectivesJSON）
+	Enabled     *bool               `yaml:"enabled,omitempty" json:"enabled,omitempty"`  // 是否启用采集，默认为 true，nil 表示启用
 }
 
 // ObjectivesJSON 用于 JSON 序列化的 objectives（使用字符串 key）。
@@ -228,6 +229,14 @@ func Load(path string) (*Config, error) {
 	expanded := os.ExpandEnv(string(raw))
 	if err := yaml.Unmarshal([]byte(expanded), &cfg); err != nil {
 		return nil, fmt.Errorf("解析配置文件失败: %w", err)
+	}
+
+	// YAML 中未设置 enabled (nil) 时默认为 true
+	trueVal := true
+	for i := range cfg.Metrics {
+		if cfg.Metrics[i].Enabled == nil {
+			cfg.Metrics[i].Enabled = &trueVal
+		}
 	}
 
 	if err := cfg.ApplyDefaults(); err != nil {

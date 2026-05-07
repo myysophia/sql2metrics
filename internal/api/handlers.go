@@ -626,6 +626,67 @@ func (s *Server) handleUpdateMetricByIndex(w http.ResponseWriter, r *http.Reques
 	s.setConfig(cfg)
 	s.writeJSON(w, http.StatusOK, metric)
 }
+// 以下代码将插入到 handlers.go 的 handleUpdateMetricByIndex 函数后面
+
+func (s *Server) handleEnableMetric(w http.ResponseWriter, r *http.Request) {
+	indexStr := strings.TrimPrefix(r.URL.Path, "/api/metrics/index/")
+	indexStr = strings.TrimSuffix(indexStr, "/enable")
+	
+	var index int
+	if _, err := fmt.Sscanf(indexStr, "%d", &index); err != nil {
+		s.writeError(w, http.StatusBadRequest, "无效的索引")
+		return
+	}
+
+	cfg := s.getConfig()
+	if index < 0 || index >= len(cfg.Metrics) {
+		s.writeError(w, http.StatusNotFound, "指标索引超出范围")
+		return
+	}
+
+	trueVal := true
+	if cfg.Metrics[index].Enabled != nil && *cfg.Metrics[index].Enabled {
+		s.writeJSON(w, http.StatusOK, cfg.Metrics[index])
+		return
+	}
+
+	cfg.Metrics[index].Enabled = &trueVal
+	if err := s.saveAndReload(cfg); err != nil {
+		s.writeError(w, http.StatusInternalServerError, fmt.Sprintf("启用指标失败: %v", err))
+		return
+	}
+	s.writeJSON(w, http.StatusOK, cfg.Metrics[index])
+}
+
+func (s *Server) handleDisableMetric(w http.ResponseWriter, r *http.Request) {
+	indexStr := strings.TrimPrefix(r.URL.Path, "/api/metrics/index/")
+	indexStr = strings.TrimSuffix(indexStr, "/disable")
+	
+	var index int
+	if _, err := fmt.Sscanf(indexStr, "%d", &index); err != nil {
+		s.writeError(w, http.StatusBadRequest, "无效的索引")
+		return
+	}
+
+	cfg := s.getConfig()
+	if index < 0 || index >= len(cfg.Metrics) {
+		s.writeError(w, http.StatusNotFound, "指标索引超出范围")
+		return
+	}
+
+	falseVal := false
+	if cfg.Metrics[index].Enabled != nil && !*cfg.Metrics[index].Enabled {
+		s.writeJSON(w, http.StatusOK, cfg.Metrics[index])
+		return
+	}
+
+	cfg.Metrics[index].Enabled = &falseVal
+	if err := s.saveAndReload(cfg); err != nil {
+		s.writeError(w, http.StatusInternalServerError, fmt.Sprintf("禁用指标失败: %v", err))
+		return
+	}
+	s.writeJSON(w, http.StatusOK, cfg.Metrics[index])
+}
 
 // ===================== 独立数据源 API =====================
 

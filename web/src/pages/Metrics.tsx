@@ -19,7 +19,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Plus, Edit2, Trash2, Download } from 'lucide-react'
+import { Plus, Edit2, Trash2, Download, Power, PowerOff } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import {
   AlertDialog,
@@ -71,6 +71,17 @@ export default function Metrics() {
     mutationFn: (index: number) => api.deleteMetricByIndex(index),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['config'] })
+    },
+  })
+
+  const toggleMutation = useMutation({
+    mutationFn: ({ index, enabled }: { index: number; enabled: boolean }) =>
+      enabled ? api.enableMetric(index) : api.disableMetric(index),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['config'] })
+    },
+    onError: (error: Error) => {
+      toast({ title: '操作失败', description: error.message, variant: 'destructive' })
     },
   })
 
@@ -175,12 +186,13 @@ export default function Metrics() {
               <TableHead>类型</TableHead>
               <TableHead>数据源</TableHead>
               <TableHead>帮助信息</TableHead>
+              <TableHead>状态</TableHead>
               <TableHead className="text-right">操作</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {config.metrics.map((metric, index) => (
-              <TableRow key={`${metric.name}-${index}`}>
+              <TableRow key={`${metric.name}-${index}`} className={!metric.enabled ? 'opacity-50' : ''}>
                 <TableCell className="font-medium">{metric.name}</TableCell>
                 <TableCell>{metric.type}</TableCell>
                 <TableCell>
@@ -188,6 +200,20 @@ export default function Metrics() {
                   {metric.connection && ` (${metric.connection})`}
                 </TableCell>
                 <TableCell>{metric.help}</TableCell>
+                <TableCell>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => toggleMutation.mutate({ index, enabled: !metric.enabled })}
+                    disabled={toggleMutation.isPending}
+                  >
+                    {metric.enabled !== false ? (
+                      <Power className="h-4 w-4 text-green-600" />
+                    ) : (
+                      <PowerOff className="h-4 w-4 text-gray-400" />
+                    )}
+                  </Button>
+                </TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-2">
                     <Button

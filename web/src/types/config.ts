@@ -49,6 +49,7 @@ export interface MetricSpec {
   connection?: string
   buckets?: number[]
   objectives?: Record<number, number>
+  enabled?: boolean
 }
 
 export interface RestAPIConfig {
